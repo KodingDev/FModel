@@ -22,7 +22,7 @@ namespace FModel.Services
 
         private readonly Assets _staticAssets = new()
         {
-            LargeImageKey = "official_logo", SmallImageKey = "verified", SmallImageText = $"v{Constants.APP_VERSION}"
+            LargeImageKey = "official_logo", SmallImageKey = "verified", SmallImageText = $"v{Constants.APP_VERSION} ({Constants.APP_SHORT_COMMIT_ID})"
         };
 
         private readonly Button[] _buttons =
@@ -48,7 +48,7 @@ namespace FModel.Services
 
         public void UpdatePresence(CUE4ParseViewModel viewModel) =>
             UpdatePresence(
-                $"{viewModel.Provider.GameDisplayName ?? viewModel.Provider.InternalGameName} - {viewModel.Provider.MountedVfs.Count}/{viewModel.Provider.MountedVfs.Count + viewModel.Provider.UnloadedVfs.Count} Packages",
+                $"{viewModel.Provider.GameDisplayName ?? viewModel.Provider.ProjectName} - {viewModel.Provider.MountedVfs.Count}/{viewModel.Provider.MountedVfs.Count + viewModel.Provider.UnloadedVfs.Count} Packages",
                 $"Mode: {UserSettings.Default.LoadingMode.GetDescription()} - {viewModel.SearchVm.ResultsCount:### ### ###} Loaded Assets".Trim());
 
         public void UpdatePresence(string details, string state)
