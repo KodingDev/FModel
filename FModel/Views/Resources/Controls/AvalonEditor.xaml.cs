@@ -119,7 +119,7 @@ public partial class AvalonEditor
         if (sender is not TextEditor avalonEditor || DataContext is not TabItem tabItem ||
             avalonEditor.Document == null || string.IsNullOrEmpty(avalonEditor.Document.Text))
             return;
-        avalonEditor.Document.FileName = tabItem.Asset.FullPath.SubstringBeforeLast('.');
+        avalonEditor.Document.FileName = tabItem.Entry.PathWithoutExtension;
 
         if (!_savedCarets.ContainsKey(avalonEditor.Document.FileName))
             _ignoreCaret = true;
@@ -127,6 +127,8 @@ public partial class AvalonEditor
         if (!tabItem.ShouldScroll) return;
 
         var lineNumber = avalonEditor.Document.Text.GetNameLineNumber(tabItem.ScrollTrigger);
+        if (lineNumber == -1) lineNumber = 1;
+
         var line = avalonEditor.Document.GetLineByNumber(lineNumber);
         avalonEditor.Select(line.Offset, line.Length);
         avalonEditor.ScrollToLine(lineNumber);
