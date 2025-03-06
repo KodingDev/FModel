@@ -77,13 +77,6 @@ public class CUE4ParseViewModel : ViewModel
         set => SetProperty(ref _modelIsOverwritingMaterial, value);
     }
 
-    private bool _modelIsWaitingAnimation;
-    public bool ModelIsWaitingAnimation
-    {
-        get => _modelIsWaitingAnimation;
-        set => SetProperty(ref _modelIsWaitingAnimation, value);
-    }
-
     public bool IsSnooperOpen => _snooper is { Exists: true, IsVisible: true };
     private Snooper _snooper;
     public Snooper SnooperViewer
@@ -271,7 +264,7 @@ public class CUE4ParseViewModel : ViewModel
             }
 
             Provider.Initialize();
-            Log.Information($"{Provider.Versions.Game} ({Provider.Versions.Platform}) | Archives: x{Provider.UnloadedVfs.Count} | AES: x{Provider.RequiredKeys.Count}");
+            Log.Information($"{Provider.Versions.Game} ({Provider.Versions.Platform}) | Archives: x{Provider.UnloadedVfs.Count} | AES: x{Provider.RequiredKeys.Count} | Loose Files: x{Provider.Files.Count}");
         });
     }
 
@@ -286,7 +279,7 @@ public class CUE4ParseViewModel : ViewModel
 
         var aesMax = Provider.RequiredKeys.Count + Provider.Keys.Count;
         var archiveMax = Provider.UnloadedVfs.Count + Provider.MountedVfs.Count;
-        Log.Information($"Project: {Provider.ProjectName} | Mounted: {Provider.MountedVfs.Count}/{archiveMax} | AES: {Provider.Keys.Count}/{aesMax}");
+        Log.Information($"Project: {Provider.ProjectName} | Mounted: {Provider.MountedVfs.Count}/{archiveMax} | AES: {Provider.Keys.Count}/{aesMax} | Files: x{Provider.Files.Count}");
     }
 
     public void ClearProvider()
@@ -442,6 +435,8 @@ public class CUE4ParseViewModel : ViewModel
     {
         var snapshot = LocalizedResourcesCount;
         await Task.WhenAll(LoadGameLocalizedResources(), LoadHotfixedLocalizedResources()).ConfigureAwait(false);
+
+        LocalizedResourcesCount = Provider.Internationalization.Count;
         if (snapshot != LocalizedResourcesCount)
         {
             FLogger.Append(ELog.Information, () =>
@@ -454,8 +449,7 @@ public class CUE4ParseViewModel : ViewModel
         if (LocalResourcesDone) return Task.CompletedTask;
         return Task.Run(() =>
         {
-            LocalizedResourcesCount += Provider.LoadLocalization(UserSettings.Default.AssetLanguage);
-            LocalResourcesDone = true;
+            LocalResourcesDone = Provider.TryChangeCulture(Provider.GetLanguageCode(UserSettings.Default.AssetLanguage));
         });
     }
     private Task LoadHotfixedLocalizedResources()
@@ -466,18 +460,8 @@ public class CUE4ParseViewModel : ViewModel
             var hotfixes = ApplicationService.ApiEndpointView.CentralApi.GetHotfixes(default, Provider.GetLanguageCode(UserSettings.Default.AssetLanguage));
             if (hotfixes == null) return;
 
+            Provider.Internationalization.Override(hotfixes);
             HotfixedResourcesDone = true;
-            foreach (var entries in hotfixes)
-            {
-                if (!Provider.LocalizedResources.ContainsKey(entries.Key))
-                    Provider.LocalizedResources[entries.Key] = new Dictionary<string, string>();
-
-                foreach (var keyValue in entries.Value)
-                {
-                    Provider.LocalizedResources[entries.Key][keyValue.Key] = keyValue.Value;
-                    LocalizedResourcesCount++;
-                }
-            }
         });
     }
 
@@ -877,9 +861,10 @@ public class CUE4ParseViewModel : ViewModel
                 SnooperViewer.Run();
                 return true;
             }
-            case UAnimSequenceBase when isNone && ModelIsWaitingAnimation:
+            case UAnimSequenceBase when isNone && UserSettings.Default.PreviewAnimations || SnooperViewer.Renderer.Options.ModelIsWaitingAnimation:
             {
-                SnooperViewer.Renderer.Animate(pointer.Object);
+                // animate all animations using their specified skeleton or when we explicitly asked for a loaded model to be animated (ignoring whether we wanted to preview animations)
+                SnooperViewer.Renderer.Animate(pointer.Object.Value);
                 SnooperViewer.Run();
                 return true;
             }
