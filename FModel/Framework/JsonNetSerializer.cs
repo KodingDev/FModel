@@ -1,6 +1,6 @@
 ﻿using System;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using RestSharp;
 using RestSharp.Serializers;
 
@@ -8,16 +8,23 @@ namespace FModel.Framework;
 
 public class JsonNetSerializer : IRestSerializer, ISerializer, IDeserializer
 {
-    public static readonly JsonSerializerSettings SerializerSettings = new()
+    public static readonly JsonSerializerOptions SerializerSettings = new()
     {
-        NullValueHandling = NullValueHandling.Ignore,
-        MissingMemberHandling = MissingMemberHandling.Ignore,
-        ContractResolver = new CamelCasePropertyNamesContractResolver()
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = null, // Use property names as-is (PascalCase)
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        Converters =
+        {
+            new GridLengthConverter(),
+            new HotkeyConverter()
+        }
     };
 
-    public string Serialize(Parameter parameter) => JsonConvert.SerializeObject(parameter.Value);
-    public string Serialize(object obj) => JsonConvert.SerializeObject(obj);
-    public T Deserialize<T>(RestResponse response) => JsonConvert.DeserializeObject<T>(response.Content!, SerializerSettings);
+    public string Serialize(Parameter parameter) => JsonSerializer.Serialize(parameter.Value, SerializerSettings);
+    public string Serialize(object obj) => JsonSerializer.Serialize(obj, SerializerSettings);
+    public T Deserialize<T>(RestResponse response) => JsonSerializer.Deserialize<T>(response.Content!, SerializerSettings);
 
     public ISerializer Serializer => this;
     public IDeserializer Deserializer => this;

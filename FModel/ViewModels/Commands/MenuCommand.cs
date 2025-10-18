@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Threading;
 using AdonisUI.Controls;
 using FModel.Extensions;
@@ -8,7 +9,6 @@ using FModel.Services;
 using FModel.Settings;
 using FModel.Views;
 using FModel.Views.Resources.Controls;
-using Newtonsoft.Json;
 
 namespace FModel.ViewModels.Commands;
 
@@ -34,7 +34,7 @@ public class MenuCommand : ViewModelCommand<ApplicationViewModel>
             case "Directory_ArchivesInfo":
                 contextViewModel.CUE4Parse.TabControl.AddTab("Archives Info");
                 contextViewModel.CUE4Parse.TabControl.SelectedTab.Highlighter = AvalonExtensions.HighlighterSelector("json");
-                contextViewModel.CUE4Parse.TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(contextViewModel.CUE4Parse.GameDirectory.DirectoryFiles, Formatting.Indented), false, false);
+                contextViewModel.CUE4Parse.TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(contextViewModel.CUE4Parse.GameDirectory.DirectoryFiles, new JsonSerializerOptions { WriteIndented = true }), false, false);
                 break;
             case "Views_3dViewer":
                 contextViewModel.CUE4Parse.SnooperViewer.Run();

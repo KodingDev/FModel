@@ -52,8 +52,8 @@ using FModel.Settings;
 using FModel.Views;
 using FModel.Views.Resources.Controls;
 using FModel.Views.Snooper;
-using Newtonsoft.Json;
 using OpenTK.Windowing.Common;
+using System.Text.Json;
 using OpenTK.Windowing.Desktop;
 using Serilog;
 using SkiaSharp;
@@ -568,7 +568,7 @@ public class CUE4ParseViewModel : ViewModel
 
                 if (saveProperties || updateUi)
                 {
-                    TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(result.GetDisplayData(saveProperties), Formatting.Indented), saveProperties, updateUi);
+                    TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(result.GetDisplayData(saveProperties), new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
                     if (saveProperties) break; // do not search for viewable exports if we are dealing with jsons
                 }
 
@@ -625,7 +625,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var metadata = new FTextLocalizationMetaDataResource(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(metadata, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -633,7 +633,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var locres = new FTextLocalizationResource(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(locres, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(locres, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -641,7 +641,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var registry = new FAssetRegistryState(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(registry, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(registry, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -649,7 +649,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var registry = new FGlobalShaderCache(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(registry, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(registry, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -658,7 +658,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var wwise = new WwiseReader(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(wwise, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(wwise, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
                 foreach (var (name, data) in wwise.WwiseEncodedMedias)
                 {
                     SaveAndPlaySound(entry.Path.SubstringBeforeWithLast('/') + name, "WEM", data);
@@ -679,7 +679,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var header = new FOodleDictionaryArchive(archive).Header;
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(header, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(header, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -722,7 +722,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var ar = new FShaderCodeArchive(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(ar, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(ar, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -730,7 +730,7 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var ar = new FPipelineCacheFile(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(ar, Formatting.Indented), saveProperties, updateUi);
+                TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(ar, new JsonSerializerOptions { WriteIndented = true }), saveProperties, updateUi);
 
                 break;
             }
@@ -757,7 +757,7 @@ public class CUE4ParseViewModel : ViewModel
 
         TabControl.SelectedTab.TitleExtra = result.TabTitleExtra;
         TabControl.SelectedTab.Highlighter = AvalonExtensions.HighlighterSelector(""); // json
-        TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(result.GetDisplayData(), Formatting.Indented), false, false);
+        TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(result.GetDisplayData(), new JsonSerializerOptions { WriteIndented = true }), false, false);
 
         for (var i = result.InclusiveStart; i < result.ExclusiveEnd; i++)
         {
@@ -945,7 +945,7 @@ public class CUE4ParseViewModel : ViewModel
         TabControl.SelectedTab.TitleExtra = "Metadata";
         TabControl.SelectedTab.Highlighter = AvalonExtensions.HighlighterSelector("");
 
-        TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(package, Formatting.Indented), false, false);
+        TabControl.SelectedTab.SetDocumentText(JsonSerializer.Serialize(package, new JsonSerializerOptions { WriteIndented = true }), false, false);
     }
 
     private void SaveAndPlaySound(string fullPath, string ext, byte[] data)

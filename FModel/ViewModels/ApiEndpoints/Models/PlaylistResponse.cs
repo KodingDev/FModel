@@ -1,34 +1,33 @@
 ﻿using System;
 using System.Diagnostics;
-using J = Newtonsoft.Json.JsonPropertyAttribute;
-using I = Newtonsoft.Json.JsonIgnoreAttribute;
+using System.Text.Json.Serialization;
 
 namespace FModel.ViewModels.ApiEndpoints.Models;
 
 [DebuggerDisplay("{" + nameof(DebuggerDisplay) + "}")]
 public class PlaylistResponse
 {
-    [J] public int Status { get; private set; }
-    [J] public Playlist Data { get; private set; }
-    [J] public string Error { get; private set; }
+    [JsonPropertyName("status")] public int Status { get; private set; }
+    [JsonPropertyName("data")] public Playlist Data { get; private set; }
+    [JsonPropertyName("error")] public string Error { get; private set; }
 
-    [I] public bool IsSuccess => Status == 200;
-    [I] public bool HasError => Error != null;
-    [I] private object DebuggerDisplay => IsSuccess ? Data : $"Error: {Status} | {Error}";
+    [JsonIgnore] public bool IsSuccess => Status == 200;
+    [JsonIgnore] public bool HasError => Error != null;
+    [JsonIgnore] private object DebuggerDisplay => IsSuccess ? Data : $"Error: {Status} | {Error}";
 }
 
 [DebuggerDisplay("{" + nameof(Id) + "}")]
 public class Playlist
 {
-    [J] public string Id { get; private set; }
-    [J] public PlaylistImages Images { get; private set; }
+    [JsonPropertyName("id")] public string Id { get; private set; }
+    [JsonPropertyName("images")] public PlaylistImages Images { get; private set; }
 }
 
 public class PlaylistImages
 {
-    [J] public Uri Showcase { get; private set; }
-    [J] public Uri MissionIcon { get; private set; }
+    [JsonPropertyName("showcase")] public Uri Showcase { get; private set; }
+    [JsonPropertyName("missionIcon")] public Uri MissionIcon { get; private set; }
 
-    [I] public bool HasShowcase => Showcase != null;
-    [I] public bool HasMissionIcon => MissionIcon != null;
+    [JsonIgnore] public bool HasShowcase => Showcase != null;
+    [JsonIgnore] public bool HasMissionIcon => MissionIcon != null;
 }

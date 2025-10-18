@@ -1,16 +1,15 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
-using J = Newtonsoft.Json.JsonPropertyAttribute;
-using I = Newtonsoft.Json.JsonIgnoreAttribute;
+using System.Text.Json.Serialization;
 
 namespace FModel.ViewModels.ApiEndpoints.Models;
 
 [DebuggerDisplay("{" + nameof(Version) + "}")]
 public class AesResponse
 {
-    [I][J("version")] public string Version { get; private set; }
-    [J("mainKey")] public string MainKey { get; set; }
-    [J("dynamicKeys")] public List<DynamicKey> DynamicKeys { get; set; }
+    [JsonIgnore][JsonPropertyName("version")] public string Version { get; private set; }
+    [JsonPropertyName("mainKey")] public string MainKey { get; set; }
+    [JsonPropertyName("dynamicKeys")] public List<DynamicKey> DynamicKeys { get; set; }
 
     public AesResponse()
     {
@@ -18,16 +17,16 @@ public class AesResponse
         DynamicKeys = new List<DynamicKey>();
     }
 
-    [I] public bool HasDynamicKeys => DynamicKeys is { Count: > 0 };
-    [I] public bool IsValid => MainKey.Length == 66 || HasDynamicKeys;
+    [JsonIgnore] public bool HasDynamicKeys => DynamicKeys is { Count: > 0 };
+    [JsonIgnore] public bool IsValid => MainKey.Length == 66 || HasDynamicKeys;
 }
 
 [DebuggerDisplay("{" + nameof(Key) + "}")]
 public class DynamicKey
 {
-    [J("name")] public string Name { get; set; }
-    [J("guid")] public string Guid { get; set; }
-    [J("key")] public string Key { get; set; }
+    [JsonPropertyName("name")] public string Name { get; set; }
+    [JsonPropertyName("guid")] public string Guid { get; set; }
+    [JsonPropertyName("key")] public string Key { get; set; }
 
-    [I] public bool IsValid => Guid.Length == 32 && Key.Length == 66;
+    [JsonIgnore] public bool IsValid => Guid.Length == 32 && Key.Length == 66;
 }

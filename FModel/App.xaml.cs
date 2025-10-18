@@ -5,13 +5,13 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using CUE4Parse;
 using FModel.Framework;
 using FModel.Services;
 using FModel.Settings;
-using Newtonsoft.Json;
 using Serilog.Sinks.SystemConsole.Themes;
 using MessageBox = AdonisUI.Controls.MessageBox;
 using MessageBoxImage = AdonisUI.Controls.MessageBoxImage;
@@ -40,7 +40,7 @@ public partial class App
 
         try
         {
-            UserSettings.Default = JsonConvert.DeserializeObject<UserSettings>(
+            UserSettings.Default = JsonSerializer.Deserialize<UserSettings>(
                 File.ReadAllText(UserSettings.FilePath), JsonNetSerializer.SerializerSettings);
         }
         catch

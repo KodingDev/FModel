@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Input;
 using CUE4Parse_Conversion;
@@ -15,7 +17,6 @@ using FModel.Framework;
 using FModel.ViewModels;
 using FModel.ViewModels.ApiEndpoints.Models;
 using FModel.Views.Snooper;
-using Newtonsoft.Json;
 
 namespace FModel.Settings
 {
@@ -38,7 +39,7 @@ namespace FModel.Settings
         {
             if (!_bSave || Default == null) return;
             Default.PerDirectory[Default.CurrentDir.GameDirectory] = Default.CurrentDir;
-            File.WriteAllText(FilePath, JsonConvert.SerializeObject(Default, Formatting.Indented));
+            File.WriteAllText(FilePath, JsonSerializer.Serialize(Default, JsonNetSerializer.SerializerSettings));
         }
 
         public static void Delete()

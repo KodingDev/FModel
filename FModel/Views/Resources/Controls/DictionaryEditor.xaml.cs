@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Objects.Core.Serialization;
 using FModel.Extensions;
 using ICSharpCode.AvalonEdit.Document;
-using Newtonsoft.Json;
 
 namespace FModel.Views.Resources.Controls;
 
@@ -36,7 +36,7 @@ public partial class DictionaryEditor
     {
         MyAvalonEditor.Document = new TextDocument
         {
-            Text = JsonConvert.SerializeObject(customVersions ?? _defaultCustomVersions, Formatting.Indented)
+            Text = JsonSerializer.Serialize(customVersions ?? _defaultCustomVersions, new JsonSerializerOptions { WriteIndented = true })
         };
     }
 
@@ -44,7 +44,7 @@ public partial class DictionaryEditor
     {
         MyAvalonEditor.Document = new TextDocument
         {
-            Text = JsonConvert.SerializeObject(options ?? _defaultOptions, Formatting.Indented)
+            Text = JsonSerializer.Serialize(options ?? _defaultOptions, new JsonSerializerOptions { WriteIndented = true })
         };
     }
 
@@ -52,7 +52,7 @@ public partial class DictionaryEditor
     {
         MyAvalonEditor.Document = new TextDocument
         {
-            Text = JsonConvert.SerializeObject(options ?? _defaultMapStructTypes, Formatting.Indented)
+            Text = JsonSerializer.Serialize(options ?? _defaultMapStructTypes, new JsonSerializerOptions { WriteIndented = true })
         };
     }
 
@@ -63,19 +63,19 @@ public partial class DictionaryEditor
             switch (Title)
             {
                 case "Versioning Configuration (Custom Versions)":
-                    CustomVersions = JsonConvert.DeserializeObject<List<FCustomVersion>>(MyAvalonEditor.Document.Text);
+                    CustomVersions = JsonSerializer.Deserialize<List<FCustomVersion>>(MyAvalonEditor.Document.Text);
                     // DialogResult = !CustomVersions.SequenceEqual(_defaultCustomVersions);
                     DialogResult = true;
                     Close();
                     break;
                 case "Versioning Configuration (Options)":
-                    Options = JsonConvert.DeserializeObject<Dictionary<string, bool>>(MyAvalonEditor.Document.Text);
+                    Options = JsonSerializer.Deserialize<Dictionary<string, bool>>(MyAvalonEditor.Document.Text);
                     // DialogResult = !Options.SequenceEqual(_defaultOptions);
                     DialogResult = true;
                     Close();
                     break;
                 case "Versioning Configuration (MapStructTypes)":
-                    MapStructTypes = JsonConvert.DeserializeObject<Dictionary<string, KeyValuePair<string, string>>>(MyAvalonEditor.Document.Text);
+                    MapStructTypes = JsonSerializer.Deserialize<Dictionary<string, KeyValuePair<string, string>>>(MyAvalonEditor.Document.Text);
                     // DialogResult = !Options.SequenceEqual(_defaultOptions);
                     DialogResult = true;
                     Close();
@@ -97,15 +97,15 @@ public partial class DictionaryEditor
         {
             "Versioning Configuration (Custom Versions)" => new TextDocument
             {
-                Text = JsonConvert.SerializeObject(_defaultCustomVersions, Formatting.Indented)
+                Text = JsonSerializer.Serialize(_defaultCustomVersions, new JsonSerializerOptions { WriteIndented = true })
             },
             "Versioning Configuration (Options)" => new TextDocument
             {
-                Text = JsonConvert.SerializeObject(_defaultOptions, Formatting.Indented)
+                Text = JsonSerializer.Serialize(_defaultOptions, new JsonSerializerOptions { WriteIndented = true })
             },
             "Versioning Configuration (MapStructTypes)" => new TextDocument
             {
-                Text = JsonConvert.SerializeObject(_defaultMapStructTypes, Formatting.Indented)
+                Text = JsonSerializer.Serialize(_defaultMapStructTypes, new JsonSerializerOptions { WriteIndented = true })
             },
             _ => throw new NotImplementedException()
         };

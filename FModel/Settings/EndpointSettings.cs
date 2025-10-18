@@ -1,8 +1,9 @@
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using FModel.Framework;
 using FModel.ViewModels.ApiEndpoints;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace FModel.Settings;
 
@@ -76,7 +77,7 @@ public class EndpointSettings : ViewModel
         IsValid = !string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(path); // be careful with this
     }
 
-    public void TryValidate(DynamicApiEndpoint endpoint, EEndpointType type, out JToken response)
+    public void TryValidate(DynamicApiEndpoint endpoint, EEndpointType type, out JsonNode response)
     {
         response = null;
         if (string.IsNullOrEmpty(Url) || string.IsNullOrEmpty(Path))
@@ -88,14 +89,14 @@ public class EndpointSettings : ViewModel
             case EEndpointType.Aes:
             {
                 var r = endpoint.GetAesKeys(default, Url, Path);
-                response = JToken.FromObject(r);
+                response = JsonSerializer.SerializeToNode(r);
                 IsValid = r.IsValid;
                 break;
             }
             case EEndpointType.Mapping:
             {
                 var r = endpoint.GetMappings(default, Url, Path);
-                response = JToken.FromObject(r);
+                response = JsonSerializer.SerializeToNode(r);
                 IsValid = r.Any(x => x.IsValid);
                 break;
             }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text.Json.Serialization;
 using System.Windows;
 using AdonisUI.Controls;
 using AutoUpdaterDotNET;
@@ -8,23 +9,22 @@ using MessageBox = AdonisUI.Controls.MessageBox;
 using MessageBoxButton = AdonisUI.Controls.MessageBoxButton;
 using MessageBoxImage = AdonisUI.Controls.MessageBoxImage;
 using MessageBoxResult = AdonisUI.Controls.MessageBoxResult;
-using J = Newtonsoft.Json.JsonPropertyAttribute;
 
 namespace FModel.ViewModels.ApiEndpoints.Models;
 
 public class GitHubRelease
 {
-    [J("assets")] public GitHubAsset[] Assets { get; private set; }
+    [JsonPropertyName("assets")] public GitHubAsset[] Assets { get; private set; }
 }
 
 public class GitHubAsset : ViewModel
 {
-    [J("name")] public string Name { get; private set; }
-    [J("size")] public int Size { get; private set; }
-    [J("download_count")] public int DownloadCount { get; private set; }
-    [J("browser_download_url")] public string BrowserDownloadUrl { get; private set; }
-    [J("created_at")] public DateTime CreatedAt { get; private set; }
-    [J("uploader")] public Author Uploader { get; private set; }
+    [JsonPropertyName("name")] public string Name { get; private set; }
+    [JsonPropertyName("size")] public int Size { get; private set; }
+    [JsonPropertyName("download_count")] public int DownloadCount { get; private set; }
+    [JsonPropertyName("browser_download_url")] public string BrowserDownloadUrl { get; private set; }
+    [JsonPropertyName("created_at")] public DateTime CreatedAt { get; private set; }
+    [JsonPropertyName("uploader")] public Author Uploader { get; private set; }
 
     private bool _isLatest;
     public bool IsLatest
@@ -37,7 +37,7 @@ public class GitHubAsset : ViewModel
 public class GitHubCommit : ViewModel
 {
     private string _sha;
-    [J("sha")]
+    [JsonPropertyName("sha")]
     public string Sha
     {
         get => _sha;
@@ -49,8 +49,8 @@ public class GitHubCommit : ViewModel
         }
     }
 
-    [J("commit")] public Commit Commit { get; set; }
-    [J("author")] public Author Author { get; set; }
+    [JsonPropertyName("commit")] public Commit Commit { get; set; }
+    [JsonPropertyName("author")] public Author Author { get; set; }
 
     private GitHubAsset _asset;
     public GitHubAsset Asset
@@ -111,15 +111,15 @@ public class GitHubCommit : ViewModel
 
 public class Commit
 {
-    [J("author")] public Author Author { get; set; }
-    [J("message")] public string Message { get; set; }
+    [JsonPropertyName("author")] public Author Author { get; set; }
+    [JsonPropertyName("message")] public string Message { get; set; }
 }
 
 public class Author
 {
-    [J("name")] public string Name { get; set; }
-    [J("login")] public string Login { get; set; }
-    [J("date")] public DateTime Date { get; set; }
-    [J("avatar_url")] public string AvatarUrl { get; set; }
-    [J("html_url")] public string HtmlUrl { get; set; }
+    [JsonPropertyName("name")] public string Name { get; set; }
+    [JsonPropertyName("login")] public string Login { get; set; }
+    [JsonPropertyName("date")] public DateTime Date { get; set; }
+    [JsonPropertyName("avatar_url")] public string AvatarUrl { get; set; }
+    [JsonPropertyName("html_url")] public string HtmlUrl { get; set; }
 }

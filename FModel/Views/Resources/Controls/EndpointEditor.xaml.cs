@@ -1,11 +1,11 @@
 ﻿using System.Diagnostics;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using FModel.Extensions;
 using FModel.Services;
 using FModel.Settings;
 using ICSharpCode.AvalonEdit.Document;
-using Newtonsoft.Json;
 
 namespace FModel.Views.Resources.Controls;
 
@@ -62,7 +62,7 @@ public partial class EndpointEditor
         Application.Current.Dispatcher.Invoke(delegate
         {
             EndpointResponse.Document ??= new TextDocument();
-            EndpointResponse.Document.Text = body.ToString(Formatting.Indented);
+            EndpointResponse.Document.Text = body.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         });
     }
 
@@ -74,7 +74,7 @@ public partial class EndpointEditor
         _isTested = true;
 
         TargetResponse.Document ??= new TextDocument();
-        TargetResponse.Document.Text = JsonConvert.SerializeObject(response, Formatting.Indented);
+        TargetResponse.Document.Text = response?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "{}";
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)

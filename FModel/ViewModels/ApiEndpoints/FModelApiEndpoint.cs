@@ -1,6 +1,7 @@
 ﻿using System;
 using AdonisUI.Controls;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -12,7 +13,6 @@ using FModel.Services;
 using FModel.Settings;
 using FModel.ViewModels.ApiEndpoints.Models;
 using FModel.Views;
-using Newtonsoft.Json;
 using RestSharp;
 using Serilog;
 using MessageBox = AdonisUI.Controls.MessageBox;
@@ -122,7 +122,7 @@ public class FModelApiEndpoint : AbstractApiProvider
 
     private void ParseUpdateInfoEvent(ParseUpdateInfoEventArgs args)
     {
-        _infos = JsonConvert.DeserializeObject<Info>(args.RemoteData);
+        _infos = JsonSerializer.Deserialize<Info>(args.RemoteData);
         if (_infos != null)
         {
             args.UpdateInfo = new UpdateInfoEventArgs

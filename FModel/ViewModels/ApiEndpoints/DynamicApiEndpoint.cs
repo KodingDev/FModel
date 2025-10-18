@@ -1,12 +1,14 @@
 ﻿using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using CUE4Parse.Utils;
 using FModel.Framework;
 using FModel.ViewModels.ApiEndpoints.Models;
-using Newtonsoft.Json.Linq;
 using RestSharp;
 using Serilog;
+using Json.Path;
 
 namespace FModel.ViewModels.ApiEndpoints;
 
@@ -17,14 +19,15 @@ public class DynamicApiEndpoint : AbstractApiProvider
     public async Task<AesResponse> GetAesKeysAsync(CancellationToken token, string url, string path)
     {
         var body = await GetRequestBody(token, url).ConfigureAwait(false);
-        var tokens = body.SelectTokens(path).ToArray();
+        var jsonPath = JsonPath.Parse(path);
+        var tokens = jsonPath.Evaluate(body)?.Matches?.Select(m => m.Value).ToArray() ?? [];
 
         var ret = new AesResponse { MainKey = Helper.FixKey(tokens.ElementAtOrDefault(0)?.ToString()) };
-        if (tokens.ElementAtOrDefault(1) is JArray dynamicKeys)
+        if (tokens.ElementAtOrDefault(1) is JsonArray dynamicKeys)
         {
             foreach (var dynamicKey in dynamicKeys)
             {
-                if (dynamicKey["guid"] is not { } guid || dynamicKey["key"] is not { } key)
+                if (dynamicKey?["guid"] is not { } guid || dynamicKey["key"] is not { } key)
                     continue;
 
                 ret.DynamicKeys.Add(new DynamicKey
@@ -47,7 +50,8 @@ public class DynamicApiEndpoint : AbstractApiProvider
     public async Task<MappingsResponse[]> GetMappingsAsync(CancellationToken token, string url, string path)
     {
         var body = await GetRequestBody(token, url).ConfigureAwait(false);
-        var tokens = body.SelectTokens(path).ToArray();
+        var jsonPath = JsonPath.Parse(path);
+        var tokens = jsonPath.Evaluate(body)?.Matches?.Select(m => m.Value).ToArray() ?? [];
 
         var ret = new MappingsResponse[] { new() };
         ret[0].Url = tokens.ElementAtOrDefault(0)?.ToString();
@@ -62,7 +66,7 @@ public class DynamicApiEndpoint : AbstractApiProvider
         return GetMappingsAsync(token, url, path).GetAwaiter().GetResult();
     }
 
-    public async Task<JToken> GetRequestBody(CancellationToken token, string url)
+    public async Task<JsonNode> GetRequestBody(CancellationToken token, string url)
     {
         var request = new FRestRequest(url)
         {
@@ -70,6 +74,6 @@ public class DynamicApiEndpoint : AbstractApiProvider
         };
         var response = await _client.ExecuteAsync(request, token).ConfigureAwait(false);
         Log.Information("[{Method}] [{Status}({StatusCode})] '{Resource}'", request.Method, response.StatusDescription, (int) response.StatusCode, response.ResponseUri?.OriginalString);
-        return response.IsSuccessful && !string.IsNullOrEmpty(response.Content) ? JToken.Parse(response.Content) : JToken.Parse("{}");
+        return response.IsSuccessful && !string.IsNullOrEmpty(response.Content) ? JsonNode.Parse(response.Content) : JsonNode.Parse("{}");
     }
 }

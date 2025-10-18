@@ -1,11 +1,12 @@
 using FModel.Framework;
-using Newtonsoft.Json;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using CUE4Parse.UE4.Objects.Core.Serialization;
 using CUE4Parse.UE4.Versions;
@@ -218,7 +219,7 @@ public class GameSelectorViewModel : ViewModel
             if (!File.Exists(launcher)) continue;
 
             Log.Debug("\"{Launcher}\" found in drive \"{DriveName}\"", launcher, drive.Name);
-            return JsonConvert.DeserializeObject<T>(File.ReadAllText(launcher));
+            return JsonSerializer.Deserialize<T>(File.ReadAllText(launcher));
         }
 
         return default;
@@ -239,38 +240,38 @@ public class GameSelectorViewModel : ViewModel
 
     private class RiotClientInstalls
     {
-        [JsonProperty("associated_client", NullValueHandling = NullValueHandling.Ignore)]
-        public Dictionary<string, string> AssociatedClient;
+        [JsonPropertyName("associated_client")]
+        public Dictionary<string, string> AssociatedClient { get; set; }
 
-        [JsonProperty("patchlines", NullValueHandling = NullValueHandling.Ignore)]
-        public Dictionary<string, string> Patchlines;
+        [JsonPropertyName("patchlines")]
+        public Dictionary<string, string> Patchlines { get; set; }
 
-        [JsonProperty("rc_default", NullValueHandling = NullValueHandling.Ignore)]
-        public string RcDefault;
+        [JsonPropertyName("rc_default")]
+        public string RcDefault { get; set; }
 
-        [JsonProperty("rc_live", NullValueHandling = NullValueHandling.Ignore)]
-        public string RcLive;
+        [JsonPropertyName("rc_live")]
+        public string RcLive { get; set; }
     }
 
     private class LauncherSettings
     {
-        [JsonProperty("channel", NullValueHandling = NullValueHandling.Ignore)]
-        public string Channel;
+        [JsonPropertyName("channel")]
+        public string Channel { get; set; }
 
-        [JsonProperty("customChannels", NullValueHandling = NullValueHandling.Ignore)]
-        public object[] CustomChannels;
+        [JsonPropertyName("customChannels")]
+        public object[] CustomChannels { get; set; }
 
-        [JsonProperty("deviceId", NullValueHandling = NullValueHandling.Ignore)]
-        public string DeviceId;
+        [JsonPropertyName("deviceId")]
+        public string DeviceId { get; set; }
 
-        [JsonProperty("formatVersion", NullValueHandling = NullValueHandling.Ignore)]
-        public int FormatVersion;
+        [JsonPropertyName("formatVersion")]
+        public int FormatVersion { get; set; }
 
-        [JsonProperty("locale", NullValueHandling = NullValueHandling.Ignore)]
-        public string Locale;
+        [JsonPropertyName("locale")]
+        public string Locale { get; set; }
 
-        [JsonProperty("productLibraryDir", NullValueHandling = NullValueHandling.Ignore)]
-        public string ProductLibraryDir;
+        [JsonPropertyName("productLibraryDir")]
+        public string ProductLibraryDir { get; set; }
     }
 #pragma warning restore 649
 
