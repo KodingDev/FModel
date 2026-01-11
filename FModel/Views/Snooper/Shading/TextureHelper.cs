@@ -23,6 +23,7 @@ public static class TextureHelper
             case "ATOMICHEART":
             case "MULTIVERSUS":
             case "BODYCAM":
+            case "TSLGAME":
             {
                 texture.SwizzleMask =
                 [
@@ -39,6 +40,7 @@ public static class TextureHelper
             case "SHOOTERGAME":
             case "DIVINEKNOCKOUT":
             case "MOONMAN":
+            case "SHF":
             {
                 texture.SwizzleMask =
                 [
@@ -54,6 +56,7 @@ public static class TextureHelper
             // B: Whatever (AO / S / E / ...)
             case "CCFF7R":
             case "PJ033":
+            case "ABINFINITE":
             {
                 texture.SwizzleMask =
                 [

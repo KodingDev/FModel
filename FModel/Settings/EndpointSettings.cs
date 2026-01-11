@@ -10,18 +10,18 @@ public class EndpointSettings : ViewModel
 {
     public static EndpointSettings[] Default(string gameName)
     {
-        switch (gameName)
+        return gameName switch
         {
-            case "Fortnite":
-            case "Fortnite [LIVE]":
-                return new EndpointSettings[]
-                {
-                    new("https://fortnitecentral.genxgames.gg/api/v1/aes", "$.['mainKey','dynamicKeys']"),
-                    new("https://fortnitecentral.genxgames.gg/api/v1/mappings", "$.[0].['url','fileName']") // just get the first available, not just oodle! (Unfortunately not default except when resetting settings)
-                };
-            default:
-                return new EndpointSettings[] { new(), new() };
-        }
+            "Fortnite" or "Fortnite [LIVE]" => [
+                new("https://uedb.dev/svc/api/v1/fortnite/aes", "$.['mainKey','dynamicKeys']"),
+                new("https://uedb.dev/svc/api/v1/fortnite/mappings", "$.mappings.ZStandard")
+            ],
+            "VALORANT" or "VALORANT [LIVE]" => [
+                new("https://uedb.dev/svc/api/v1/valorant/aes", "$.['mainKey','dynamicKeys']"),
+                new("https://uedb.dev/svc/api/v1/valorant/mappings", "$.mappings.ZStandard")
+            ],
+            _ => [new(), new()],
+        };
     }
 
     private string _url;

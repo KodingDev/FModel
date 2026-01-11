@@ -55,8 +55,9 @@ public class LoadCommand : ViewModelCommand<LoadingModesViewModel>
 #endif
         _applicationView.CUE4Parse.AssetsFolder.Folders.Clear();
         _applicationView.CUE4Parse.SearchVm.SearchResults.Clear();
-        MainWindow.YesWeCats.LeftTabControl.SelectedIndex = 1; // folders tab
-        Helper.CloseWindow<AdonisWindow>("Search View"); // close search window if opened
+        _applicationView.SelectedLeftTabIndex = 1; // folders tab
+        _applicationView.IsAssetsExplorerVisible = true;
+        Helper.CloseWindow<AdonisWindow>("Search For Packages"); // close search window if opened
 
         await Task.WhenAll(
             _applicationView.CUE4Parse.LoadLocalizedResources(), // load locres if not already loaded,
@@ -70,7 +71,11 @@ public class LoadCommand : ViewModelCommand<LoadingModesViewModel>
                     case ELoadingMode.Multiple:
                     {
                         var l = (IList) parameter;
-                        if (l.Count < 1) return;
+                        if (l.Count == 0)
+                        {
+                            UserSettings.Default.LoadingMode = ELoadingMode.All;
+                            goto case ELoadingMode.All;
+                        }
 
                         var directoryFilesToShow = l.Cast<FileItem>();
                         FilterDirectoryFilesToDisplay(cancellationToken, directoryFilesToShow);
@@ -85,6 +90,11 @@ public class LoadCommand : ViewModelCommand<LoadingModesViewModel>
                     case ELoadingMode.AllButModified:
                     {
                         FilterNewOrModifiedFilesToDisplay(cancellationToken);
+                        break;
+                    }
+                    case ELoadingMode.AllButPatched:
+                    {
+                        FilterPacthedFilesToDisplay(cancellationToken);
                         break;
                     }
                     default: throw new ArgumentOutOfRangeException();
@@ -272,5 +282,27 @@ public class LoadCommand : ViewModelCommand<LoadingModesViewModel>
             return;
 
         entries.Add(asset);
+    }
+
+    private void FilterPacthedFilesToDisplay(CancellationToken cancellationToken)
+    {
+        var loaded = new Dictionary<string, GameFile>(_applicationView.CUE4Parse.Provider.PathComparer);
+
+        foreach (var (key, asset) in _applicationView.CUE4Parse.Provider.Files)
+        {
+            cancellationToken.ThrowIfCancellationRequested(); // cancel if needed
+            if (asset.IsUePackagePayload) continue;
+
+            if (asset is VfsEntry entry && loaded.TryGetValue(key, out var file) &&
+                file is VfsEntry existingEntry && entry.Vfs.ReadOrder < existingEntry.Vfs.ReadOrder)
+            {
+                continue;
+            }
+
+            loaded[key] = asset;
+        }
+
+        _applicationView.Status.UpdateStatusLabel($"{loaded.Count:### ### ###} Packages");
+        _applicationView.CUE4Parse.AssetsFolder.BulkPopulate(loaded.Values);
     }
 }

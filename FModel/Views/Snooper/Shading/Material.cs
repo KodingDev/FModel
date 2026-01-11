@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -121,17 +121,22 @@ public class Material : IDisposable
                     RoughnessMax = roughness + d;
                 }
 
-                if (Parameters.TryGetScalar(out var emissiveMultScalar, "emissive mult", "Emissive_Mult", "EmissiveIntensity", "EmissionIntensity"))
-                    EmissiveMult = emissiveMultScalar;
-                else if (Parameters.TryGetLinearColor(out var emissiveMultColor, "Emissive Multiplier", "EmissiveMultiplier"))
-                    EmissiveMult = emissiveMultColor.R;
+                if (!options.SkipEmmisive())
+                {
+                    if (Parameters.TryGetScalar(out var emissiveMultScalar, "emissive mult", "Emissive_Mult", "EmissiveIntensity", "EmissionIntensity"))
+                        EmissiveMult = emissiveMultScalar;
+                    else if (Parameters.TryGetLinearColor(out var emissiveMultColor, "Emissive Multiplier", "EmissiveMultiplier"))
+                        EmissiveMult = emissiveMultColor.R;
+                }
+                else
+                    EmissiveMult = 0f;
 
                 if (Parameters.TryGetLinearColor(out var EmissiveUVs,
                         "EmissiveUVs_RG_UpperLeftCorner_BA_LowerRightCorner",
                         "Emissive Texture UVs RG_TopLeft BA_BottomRight",
                         "Emissive 2 UV Positioning (RG)UpperLeft (BA)LowerRight",
                         "EmissiveUVPositioning (RG)UpperLeft (BA)LowerRight",
-                        "Emissive_CH"))
+                        "Emissive_CH", "EmissiveColor4LM", "Emissive Sphere Center"))
                     EmissiveRegion = new Vector4(EmissiveUVs.R, EmissiveUVs.G, EmissiveUVs.B, EmissiveUVs.A);
 
                 if ((Parameters.TryGetSwitch(out var swizzleRoughnessToGreen, "SwizzleRoughnessToGreen") && swizzleRoughnessToGreen) ||

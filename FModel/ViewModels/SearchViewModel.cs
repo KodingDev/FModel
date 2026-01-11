@@ -1,17 +1,25 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Data;
 using CUE4Parse.FileProvider.Objects;
+using CUE4Parse.UE4.VirtualFileSystem;
 using FModel.Framework;
 
 namespace FModel.ViewModels;
 
 public class SearchViewModel : ViewModel
 {
-    private string _filterText;
+    public enum ESortSizeMode
+    {
+        None,
+        Ascending,
+        Descending
+    }
+
+    private string _filterText = string.Empty;
     public string FilterText
     {
         get => _filterText;
@@ -32,22 +40,94 @@ public class SearchViewModel : ViewModel
         set => SetProperty(ref _hasMatchCaseEnabled, value);
     }
 
-    public int ResultsCount => SearchResults?.Count ?? 0;
+    private ESortSizeMode _currentSortSizeMode = ESortSizeMode.None;
+    public ESortSizeMode CurrentSortSizeMode
+    {
+        get => _currentSortSizeMode;
+        set => SetProperty(ref _currentSortSizeMode, value);
+    }
+
+    private int _resultsCount = 0;
+    public int ResultsCount
+    {
+        get => _resultsCount;
+        private set => SetProperty(ref _resultsCount, value);
+    }
+
+    private GameFile _refFile;
+    public GameFile RefFile
+    {
+        get => _refFile;
+        private set => SetProperty(ref _refFile, value);
+    }
+
     public RangeObservableCollection<GameFile> SearchResults { get; }
-    public ICollectionView SearchResultsView { get; }
+    public ListCollectionView SearchResultsView { get; }
 
     public SearchViewModel()
     {
-        SearchResults = new RangeObservableCollection<GameFile>();
-        SearchResultsView = new ListCollectionView(SearchResults);
+        SearchResults = [];
+        SearchResultsView = new ListCollectionView(SearchResults)
+        {
+            Filter = e => ItemFilter(e, FilterText.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)),
+        };
+        ResultsCount = SearchResultsView.Count;
     }
 
     public void RefreshFilter()
     {
-        if (SearchResultsView.Filter == null)
-            SearchResultsView.Filter = e => ItemFilter(e, FilterText.Trim().Split(' '));
-        else
-            SearchResultsView.Refresh();
+        SearchResultsView.Refresh();
+        ResultsCount = SearchResultsView.Count;
+    }
+
+    public void ChangeCollection(IEnumerable<GameFile> files, GameFile refFile = null)
+    {
+        SearchResults.Clear();
+        SearchResults.AddRange(files);
+        RefFile = refFile;
+        ResultsCount = SearchResultsView.Count;
+    }
+
+    public async Task CycleSortSizeMode()
+    {
+        CurrentSortSizeMode = CurrentSortSizeMode switch
+        {
+            ESortSizeMode.None => ESortSizeMode.Descending,
+            ESortSizeMode.Descending => ESortSizeMode.Ascending,
+            _ => ESortSizeMode.None
+        };
+
+        var sorted = await Task.Run(() =>
+        {
+            var archiveDict = SearchResults
+                .OfType<VfsEntry>()
+                .Select(f => f.Vfs.Name)
+                .Distinct()
+                .Select((name, idx) => (name, idx))
+                .ToDictionary(x => x.name, x => x.idx);
+
+            var keyed = SearchResults.Select(f =>
+            {
+                int archiveKey = f is VfsEntry ve && archiveDict.TryGetValue(ve.Vfs.Name, out var key) ? key : -1;
+                return (File: f, f.Size, ArchiveKey: archiveKey);
+            });
+
+            return CurrentSortSizeMode switch
+            {
+                ESortSizeMode.Ascending => keyed
+                    .OrderBy(x => x.Size).ThenBy(x => x.ArchiveKey)
+                    .Select(x => x.File).ToList(),
+                ESortSizeMode.Descending => keyed
+                    .OrderByDescending(x => x.Size).ThenBy(x => x.ArchiveKey)
+                    .Select(x => x.File).ToList(),
+                _ => keyed
+                    .OrderBy(x => x.ArchiveKey).ThenBy(x => x.File.Path, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => x.File).ToList()
+            };
+        });
+
+        SearchResults.Clear();
+        SearchResults.AddRange(sorted);
     }
 
     private bool ItemFilter(object item, IEnumerable<string> filters)

@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using AdonisUI.Controls;
 using FModel.Framework;
 using FModel.Services;
@@ -31,6 +31,9 @@ public class TabCommand : ViewModelCommand<TabItem>
             case "Close_Other_Tabs":
                 _applicationView.CUE4Parse.TabControl.RemoveOtherTabs(tabViewModel);
                 break;
+            case "Find_References":
+                _applicationView.CUE4Parse.FindReferences(tabViewModel.Entry);
+                break;
             case "Asset_Export_Data":
                 await _threadWorkerView.Begin(_ => _applicationView.CUE4Parse.ExportData(tabViewModel.Entry));
                 break;
@@ -56,6 +59,12 @@ public class TabCommand : ViewModelCommand<TabItem>
                 await _threadWorkerView.Begin(cancellationToken =>
                 {
                     _applicationView.CUE4Parse.Extract(cancellationToken, tabViewModel.Entry, false, EBulkType.Animations);
+                });
+                break;
+            case "Asset_Save_Audio":
+                await _threadWorkerView.Begin(cancellationToken =>
+                {
+                    _applicationView.CUE4Parse.Extract(cancellationToken, tabViewModel.Entry, false, EBulkType.Audio);
                 });
                 break;
             case "Open_Properties":
