@@ -59,6 +59,20 @@ public partial class SettingsView
 
         _applicationView.CUE4Parse.Provider.ReadScriptData = UserSettings.Default.ReadScriptData;
         _applicationView.CUE4Parse.Provider.ReadShaderMaps = UserSettings.Default.ReadShaderMaps;
+
+        // Handle MCP Server settings
+        if (UserSettings.Default.McpServerEnabled)
+        {
+            if (!ApplicationService.McpServer.IsRunning)
+            {
+                ApplicationService.McpServer.SetProvider(_applicationView.CUE4Parse);
+                ApplicationService.McpServer.Start(UserSettings.Default.McpServerPort);
+            }
+        }
+        else
+        {
+            ApplicationService.McpServer.Stop();
+        }
     }
 
     private void OnBrowseOutput(object sender, RoutedEventArgs e)

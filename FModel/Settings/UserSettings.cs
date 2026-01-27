@@ -537,5 +537,19 @@ namespace FModel.Settings
             get => _previewTexturesAssetExplorer;
             set => SetProperty(ref _previewTexturesAssetExplorer, value);
         }
+
+        private bool _mcpServerEnabled;
+        public bool McpServerEnabled
+        {
+            get => _mcpServerEnabled;
+            set => SetProperty(ref _mcpServerEnabled, value);
+        }
+
+        private int _mcpServerPort = 27463;
+        public int McpServerPort
+        {
+            get => _mcpServerPort;
+            set => SetProperty(ref _mcpServerPort, value);
+        }
     }
 }

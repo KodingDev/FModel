@@ -80,6 +80,7 @@ public partial class MainWindow
     private void OnClosing(object sender, CancelEventArgs e)
     {
         _discordHandler.Dispose();
+        ApplicationService.McpServer.Stop();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -124,6 +125,13 @@ public partial class MainWindow
                     _discordHandler.Initialize(_applicationView.GameDisplayName);
             })
         ).ConfigureAwait(false);
+
+        // Initialize MCP Server if enabled
+        if (UserSettings.Default.McpServerEnabled)
+        {
+            ApplicationService.McpServer.SetProvider(_applicationView.CUE4Parse);
+            ApplicationService.McpServer.Start(UserSettings.Default.McpServerPort);
+        }
 
 #if DEBUG
         // await _threadWorkerView.Begin(cancellationToken =>

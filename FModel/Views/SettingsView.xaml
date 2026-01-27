@@ -43,6 +43,9 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -254,6 +257,20 @@
                              TextAlignment="Right"
                              TextChanged="CriwareKeyBox_TextChanged"
                              Loaded="CriwareKeyBox_Loaded"/>
+
+                    <Separator Grid.Row="21" Grid.Column="0" Grid.ColumnSpan="7" Style="{StaticResource CustomSeparator}" Tag="MCP SERVER"></Separator>
+
+                    <TextBlock Grid.Row="22" Grid.Column="0" Text="Enable MCP Server" VerticalAlignment="Center" Margin="0 0 0 5"
+                               ToolTip="Start an MCP (Model Context Protocol) server to allow LLMs to query game assets" />
+                    <CheckBox Grid.Row="22" Grid.Column="2" Content="{Binding IsChecked, RelativeSource={RelativeSource Self}, Converter={x:Static converters:BoolToToggleConverter.Instance}}"
+                              IsChecked="{Binding McpServerEnabled, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay}"
+                              Style="{DynamicResource {x:Static adonisUi:Styles.ToggleSwitch}}" Margin="0 5 0 10"/>
+
+                    <TextBlock Grid.Row="23" Grid.Column="0" Text="MCP Server Port" VerticalAlignment="Center" Margin="0 0 0 5"
+                               ToolTip="Port number for the MCP server (default: 27463)" />
+                    <TextBox Grid.Row="23" Grid.Column="2" Grid.ColumnSpan="5" Margin="0 0 0 10"
+                             Text="{Binding McpServerPort, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Port number (1024-65535)" />
 
                 </Grid>
             </DataTemplate>
