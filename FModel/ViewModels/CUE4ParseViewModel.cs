@@ -10,7 +10,9 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+
 using AdonisUI.Controls;
+
 using CUE4Parse;
 using CUE4Parse.Compression;
 using CUE4Parse.Encryption.Aes;
@@ -19,6 +21,7 @@ using CUE4Parse.FileProvider.Objects;
 using CUE4Parse.FileProvider.Vfs;
 using CUE4Parse.GameTypes.Aion2.Objects;
 using CUE4Parse.GameTypes.AshEchoes.FileProvider;
+using CUE4Parse.GameTypes.SMG.UE4.Assets.Exports.Wwise;
 using CUE4Parse.GameTypes.KRD.Assets.Exports;
 using CUE4Parse.MappingsProvider;
 using CUE4Parse.UE4.AssetRegistry;
@@ -50,11 +53,14 @@ using CUE4Parse.UE4.Shaders;
 using CUE4Parse.UE4.Versions;
 using CUE4Parse.UE4.Wwise;
 using CUE4Parse.Utils;
+
 using CUE4Parse_Conversion;
 using CUE4Parse_Conversion.Sounds;
+
 using EpicManifestParser;
 using EpicManifestParser.UE;
 using EpicManifestParser.ZlibngDotNetDecompressor;
+
 using FModel.Creator;
 using FModel.Extensions;
 using FModel.Framework;
@@ -63,14 +69,21 @@ using FModel.Settings;
 using FModel.Views;
 using FModel.Views.Resources.Controls;
 using FModel.Views.Snooper;
+
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
+
 using Serilog;
+
 using SkiaSharp;
+
 using Svg.Skia;
+
 using UE4Config.Parsing;
+
 using Application = System.Windows.Application;
 using FGuid = CUE4Parse.UE4.Objects.Core.Misc.FGuid;
 
@@ -205,8 +218,17 @@ public class CUE4ParseViewModel : ViewModel
 
     public async Task Initialize()
     {
+        await _apiEndpointView.EpicApi.VerifyAuth(CancellationToken.None);
         await _threadWorkerView.Begin(cancellationToken =>
         {
+            Provider.OnDemandOptions = new IoStoreOnDemandOptions
+            {
+                ChunkHostUri = new Uri("https://download.epicgames.com/", UriKind.Absolute),
+                ChunkCacheDirectory = Directory.CreateDirectory(Path.Combine(UserSettings.Default.OutputDirectory, ".data")),
+                Authorization = new AuthenticationHeaderValue("Bearer", UserSettings.Default.LastAuthResponse.AccessToken),
+                Timeout = TimeSpan.FromSeconds(30)
+            };
+
             switch (Provider)
             {
                 case StreamedFileProvider p:
@@ -296,7 +318,7 @@ public class CUE4ParseViewModel : ViewModel
             }
 
             Provider.Initialize();
-            _wwiseProviderLazy = new Lazy<WwiseProvider>(() => new WwiseProvider(Provider, UserSettings.Default.WwiseMaxBnkPrefetch));
+            _wwiseProviderLazy = new Lazy<WwiseProvider>(() => new WwiseProvider(Provider, UserSettings.Default.GameDirectory, UserSettings.Default.WwiseMaxBnkPrefetch));
             _fmodProviderLazy = new Lazy<FModProvider>(() => new FModProvider(Provider, UserSettings.Default.GameDirectory));
             _criWareProviderLazy = new Lazy<CriWareProvider>(() => new CriWareProvider(Provider, UserSettings.Default.GameDirectory));
             Log.Information($"{Provider.Versions.Game} ({Provider.Versions.Platform}) | Archives: x{Provider.UnloadedVfs.Count} | AES: x{Provider.RequiredKeys.Count} | Loose Files: x{Provider.Files.Count}");
@@ -465,14 +487,7 @@ public class CUE4ParseViewModel : ViewModel
             var ioStoreOnDemandPath = Path.Combine(UserSettings.Default.GameDirectory, "..\\..\\..\\Cloud", inst[0].Value.SubstringAfterLast("/").SubstringBefore("\""));
             if (!File.Exists(ioStoreOnDemandPath)) return;
 
-            await _apiEndpointView.EpicApi.VerifyAuth(CancellationToken.None);
-            await Provider.RegisterVfs(new IoChunkToc(ioStoreOnDemandPath), new IoStoreOnDemandOptions
-            {
-                ChunkBaseUri = new Uri("https://download.epicgames.com/ias/fortnite/", UriKind.Absolute),
-                ChunkCacheDirectory = Directory.CreateDirectory(Path.Combine(UserSettings.Default.OutputDirectory, ".data")),
-                Authorization = new AuthenticationHeaderValue("Bearer", UserSettings.Default.LastAuthResponse.AccessToken),
-                Timeout = TimeSpan.FromSeconds(30)
-            });
+            await Provider.RegisterVfsAsync(new IoChunkToc(ioStoreOnDemandPath));
             var onDemandCount = await Provider.MountAsync();
             FLogger.Append(ELog.Information, () =>
                 FLogger.Text($"{onDemandCount} on-demand archive{(onDemandCount > 1 ? "s" : "")} streamed via epicgames.com", Constants.WHITE, true));
@@ -1059,6 +1074,13 @@ public class CUE4ParseViewModel : ViewModel
                 }
 
                 TabControl.SelectedTab.AddImage(sourceFile.SubstringAfterLast('/'), false, bitmap, false, updateUi);
+                return false;
+            }
+            // The Dark Pictures Anthology: House of Ashes
+            case UExternalSource when (isNone || saveAudio) && pointer.Object.Value is UExternalSource externalSource:
+            {
+                var audioName = Path.GetFileNameWithoutExtension(externalSource.ExternalSourcePath);
+                SaveAndPlaySound(audioName, "wem", externalSource.Data?.WemFile ?? [], saveAudio);
                 return false;
             }
             case UAkAudioEvent when (isNone || saveAudio) && pointer.Object.Value is UAkAudioEvent audioEvent:
