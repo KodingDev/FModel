@@ -607,6 +607,62 @@
                                             HotKey="{Binding NextAudio, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay}" />
                 </Grid>
             </DataTemplate>
+            <DataTemplate x:Key="McpTemplate">
+                <Grid adonisExtensions:LayerExtension.Layer="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="10" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                               TextWrapping="Wrap" Margin="0 0 0 10"
+                               Foreground="{DynamicResource {x:Static adonisUi:Brushes.Layer1InteractionForegroundBrush}}"
+                               Text="Embeds an MCP server inside FModel so AI tools (e.g. Claude Desktop) can read assets, search files, extract textures, and more — using the game that is already loaded." />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Enable MCP Server" VerticalAlignment="Center" Margin="0 0 0 5" />
+                    <CheckBox Grid.Row="1" Grid.Column="2"
+                              Content="{Binding IsChecked, RelativeSource={RelativeSource Self}, Converter={x:Static converters:BoolToToggleConverter.Instance}}"
+                              IsChecked="{Binding McpServerEnabled, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay}"
+                              Style="{DynamicResource {x:Static adonisUi:Styles.ToggleSwitch}}"
+                              Margin="0 5 0 5" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Port" VerticalAlignment="Center" Margin="0 0 0 5" />
+                    <TextBox Grid.Row="2" Grid.Column="2" Margin="0 0 0 5" MaxLength="5"
+                             Text="{Binding McpServerPort, Source={x:Static local:Settings.UserSettings.Default}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <Separator Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource CustomSeparator}" Tag="CONNECT" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Claude Desktop config" VerticalAlignment="Top" Margin="0 5 0 0" />
+                    <Border Grid.Row="4" Grid.Column="2" Margin="0 5 0 5"
+                            Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
+                            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}"
+                            BorderThickness="1" CornerRadius="3" Padding="8">
+                        <TextBlock FontFamily="Consolas" FontSize="11" TextWrapping="Wrap">
+                            <Run Text="{}{" /><LineBreak />
+                            <Run Text='  "mcpServers": {' /><LineBreak />
+                            <Run Text='    "fmodel": {' /><LineBreak />
+                            <Run Text='      "url": "http://localhost:' /><Run Text="{Binding McpServerPort, Source={x:Static local:Settings.UserSettings.Default}}" /><Run Text='/sse"' /><LineBreak />
+                            <Run Text='    }' /><LineBreak />
+                            <Run Text='  }' /><LineBreak />
+                            <Run Text="}" />
+                        </TextBlock>
+                    </Border>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                               FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Margin="0 5 0 0"
+                               Foreground="{DynamicResource {x:Static adonisUi:Brushes.Layer1InteractionForegroundBrush}}"
+                               Text="Changes take effect when you click OK. Requires a loaded game to serve results." />
+                </Grid>
+            </DataTemplate>
         </ResourceDictionary>
     </adonisControls:AdonisWindow.Resources>
     <Grid>
@@ -681,6 +737,20 @@
                             </Canvas>
                         </Viewbox>
                         <TextBlock Text="Keybindings" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </StackPanel>
+                </TreeViewItem.Header>
+            </TreeViewItem>
+            <TreeViewItem Tag="McpTemplate">
+                <TreeViewItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <Viewbox Width="16" Height="16" HorizontalAlignment="Center" Margin="-20 4 7.5 4">
+                            <Canvas Width="24" Height="24">
+                                <!-- Plug/API icon -->
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.AccentForegroundBrush}}"
+                                      Data="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4C2.9 5 2 5.9 2 7v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z" />
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="MCP Server" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </StackPanel>
                 </TreeViewItem.Header>
             </TreeViewItem>
