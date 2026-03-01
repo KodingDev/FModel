@@ -2,8 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Windows;
 using CUE4Parse.FileProvider.Objects;
+using FModel.Extensions;
 using FModel.Framework;
 
 namespace FModel.ViewModels.Commands;
@@ -50,6 +50,6 @@ public class CopyCommand : ViewModelCommand<ApplicationViewModel>
                 break;
         }
 
-        Clipboard.SetText(sb.ToString().TrimEnd());
+        ClipboardExtensions.SetText(sb.ToString().TrimEnd());
     }
 }

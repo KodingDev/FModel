@@ -3,6 +3,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using FModel.Extensions;
 using FModel.Services;
 using FModel.Settings;
 using FModel.ViewModels;
@@ -65,6 +66,6 @@ public partial class FolderContextMenuDictionary
         if (sender is not MenuItem { CommandParameter: IEnumerable<object> list } || list.FirstOrDefault() is not TreeItem folder)
             return;
 
-        Clipboard.SetText(folder.PathAtThisPoint);
+        ClipboardExtensions.SetText(folder.PathAtThisPoint);
     }
 }

@@ -1,5 +1,5 @@
-using System.Windows;
 using AdonisUI.Controls;
+using FModel.Extensions;
 using FModel.Framework;
 using FModel.Services;
 using FModel.Views.Resources.Controls;
@@ -78,7 +78,7 @@ public class TabCommand : ViewModelCommand<TabItem>
                 });
                 break;
             case "Copy_Asset_Path":
-                Clipboard.SetText(tabViewModel.Entry.Path);
+                ClipboardExtensions.SetText(tabViewModel.Entry.Path);
                 break;
         }
     }

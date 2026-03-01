@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 
@@ -11,9 +12,14 @@ namespace FModel.Extensions;
 
 public static class ClipboardExtensions
 {
+    public static void SetText(string text)
+    {
+        try { Clipboard.SetText(text); }
+        catch (COMException) { }
+    }
+
     public static void SetImage(byte[] pngBytes, string fileName = null)
     {
-        Clipboard.Clear();
         var data = new DataObject();
         using var pngMs = new MemoryStream(pngBytes);
         using var image = Image.FromStream(pngMs);
@@ -31,7 +37,8 @@ public static class ClipboardExtensions
             data.SetData(DataFormats.Html, htmlFragment);
         }
         // The 'copy=true' argument means the MemoryStreams can be safely disposed after the operation
-        Clipboard.SetDataObject(data, true);
+        try { Clipboard.SetDataObject(data, true); }
+        catch (COMException) { }
     }
 
     public static byte[] ConvertToDib(Image image)
