@@ -545,6 +545,41 @@ namespace FModel.Settings
             set => SetProperty(ref _previewTexturesAssetExplorer, value);
         }
 
+        private double _mainWindowLeft = double.NaN;
+        public double MainWindowLeft
+        {
+            get => _mainWindowLeft;
+            set => SetProperty(ref _mainWindowLeft, value);
+        }
+
+        private double _mainWindowTop = double.NaN;
+        public double MainWindowTop
+        {
+            get => _mainWindowTop;
+            set => SetProperty(ref _mainWindowTop, value);
+        }
+
+        private double _mainWindowWidth = double.NaN;
+        public double MainWindowWidth
+        {
+            get => _mainWindowWidth;
+            set => SetProperty(ref _mainWindowWidth, value);
+        }
+
+        private double _mainWindowHeight = double.NaN;
+        public double MainWindowHeight
+        {
+            get => _mainWindowHeight;
+            set => SetProperty(ref _mainWindowHeight, value);
+        }
+
+        private bool _mainWindowMaximized;
+        public bool MainWindowMaximized
+        {
+            get => _mainWindowMaximized;
+            set => SetProperty(ref _mainWindowMaximized, value);
+        }
+
         private bool _mcpServerEnabled;
         public bool McpServerEnabled
         {

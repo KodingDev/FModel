@@ -183,6 +183,16 @@
     <ProjectReference Include="..\CUE4Parse\CUE4Parse\CUE4Parse.csproj" />
   </ItemGroup>
 
+  <!-- Include detex native library in single-file publish bundle -->
+  <Target Name="IncludeDetexInSingleFile" BeforeTargets="GenerateSingleFileBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="..\CUE4Parse\CUE4Parse-Conversion\Resources\detex\detex-windows-x86_64\detex.dll">
+        <RelativePath>detex.dll</RelativePath>
+        <IsNative>true</IsNative>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <Resource Include="Resources\android.png" />
     <Resource Include="Resources\apple.png" />

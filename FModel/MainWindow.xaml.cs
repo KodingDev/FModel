@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using FModel.Services;
 using FModel.Settings;
@@ -51,6 +52,7 @@ public partial class MainWindow
 
         DataContext = _applicationView;
         InitializeComponent();
+        RestoreWindowPlacement();
 
         AssetsExplorer.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
         AssetsListName.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
@@ -79,8 +81,63 @@ public partial class MainWindow
 
     private void OnClosing(object sender, CancelEventArgs e)
     {
+        SaveWindowPlacement();
         _discordHandler.Dispose();
         ApplicationService.McpServer.Stop();
+    }
+
+    private void RestoreWindowPlacement()
+    {
+        var s = UserSettings.Default;
+        if (double.IsNaN(s.MainWindowLeft) || double.IsNaN(s.MainWindowTop) ||
+            double.IsNaN(s.MainWindowWidth) || double.IsNaN(s.MainWindowHeight))
+            return;
+
+        if (s.MainWindowWidth <= 0 || s.MainWindowHeight <= 0)
+            return;
+
+        var savedRect = new Rect(s.MainWindowLeft, s.MainWindowTop, s.MainWindowWidth, s.MainWindowHeight);
+        var virtualScreen = new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+
+        if (!savedRect.IntersectsWith(virtualScreen))
+            return;
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        BindingOperations.ClearBinding(this, WidthProperty);
+        BindingOperations.ClearBinding(this, HeightProperty);
+
+        Left = s.MainWindowLeft;
+        Top = s.MainWindowTop;
+        Width = s.MainWindowWidth;
+        Height = s.MainWindowHeight;
+
+        if (s.MainWindowMaximized)
+            WindowState = WindowState.Maximized;
+    }
+
+    private void SaveWindowPlacement()
+    {
+        var s = UserSettings.Default;
+        if (WindowState == WindowState.Maximized)
+        {
+            s.MainWindowLeft = RestoreBounds.Left;
+            s.MainWindowTop = RestoreBounds.Top;
+            s.MainWindowWidth = RestoreBounds.Width;
+            s.MainWindowHeight = RestoreBounds.Height;
+            s.MainWindowMaximized = true;
+        }
+        else if (WindowState == WindowState.Normal)
+        {
+            s.MainWindowLeft = Left;
+            s.MainWindowTop = Top;
+            s.MainWindowWidth = Width;
+            s.MainWindowHeight = Height;
+            s.MainWindowMaximized = false;
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

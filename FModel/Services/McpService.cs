@@ -79,7 +79,7 @@ public class McpServerHandler
         }
     }
 
-    public void Stop()
+    public async Task StopAsync()
     {
         if (!IsRunning) return;
 
@@ -87,7 +87,8 @@ public class McpServerHandler
         {
             _cts?.Cancel();
             using var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            _app?.StopAsync(stopCts.Token).GetAwaiter().GetResult();
+            if (_app != null)
+                await _app.StopAsync(stopCts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -101,5 +102,11 @@ public class McpServerHandler
             IsRunning = false;
             Log.Information("[MCP] Server stopped");
         }
+    }
+
+    public void Stop()
+    {
+        if (!IsRunning) return;
+        Task.Run(() => StopAsync()).GetAwaiter().GetResult();
     }
 }

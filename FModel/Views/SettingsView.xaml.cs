@@ -71,7 +71,7 @@ public partial class SettingsView
         }
         else
         {
-            ApplicationService.McpServer.Stop();
+            await ApplicationService.McpServer.StopAsync();
         }
     }
 
