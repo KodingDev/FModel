@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 using CUE4Parse.UE4.Assets.Exports.Texture;
@@ -450,6 +452,154 @@ public class FModelMcpTools(McpServerHandler handler)
         }
 
         return Text(JsonConvert.SerializeObject(new { count = results.Count, limit, results }, Formatting.Indented));
+    }
+
+    // -------------------------------------------------------------------------
+    // Full-text content search
+    // -------------------------------------------------------------------------
+
+    [McpServerTool]
+    [Description("""
+        Full-text search across the raw content of all game files.
+        Scans raw bytes for the query string in both UTF-8 and UTF-16LE encodings,
+        so it finds property names, string table entries, object references, etc.
+        without needing to deserialize every asset.
+
+        Use path_prefix and extension filters to narrow the search scope — searching
+        the entire game can take minutes for large titles.
+        """)]
+    public async Task<CallToolResult> SearchContent(
+        [Description("The text string to search for inside file contents.")] string query,
+        [Description("Directory prefix to narrow the search (e.g. 'FortniteGame/Content/Athena'). Highly recommended for large games.")] string path_prefix = "",
+        [Description("File extension without dot to filter by (e.g. 'uasset', 'umap', 'bin'). Empty searches all files.")] string extension = "",
+        [Description("Case-sensitive matching. Default false.")] bool case_sensitive = false,
+        [Description("Maximum number of matching files to return.")] int limit = 50,
+        [Description("Maximum number of files to scan before stopping (0 = unlimited). Use to cap search time on huge games.")] int max_scan = 0)
+    {
+        if (!IsLoaded) return Error(NotLoadedMsg);
+        if (string.IsNullOrWhiteSpace(query)) return Error("query cannot be empty.");
+        if (query.Length < 2) return Error("query must be at least 2 characters.");
+
+        return await Task.Run(() =>
+        {
+            var files = handler.CUE4Parse.Provider.Files.Values.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(path_prefix))
+                files = files.Where(f => f.Path.StartsWith(path_prefix, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(extension))
+                files = files.Where(f => f.Path.EndsWith('.' + extension, StringComparison.OrdinalIgnoreCase));
+
+            var fileList = files.ToList();
+            var totalFiles = fileList.Count;
+            if (max_scan > 0 && fileList.Count > max_scan)
+                fileList = fileList.Take(max_scan).ToList();
+
+            // Prepare search needles — for case-insensitive we store both lower and upper variants
+            var utf8Needle = Encoding.UTF8.GetBytes(case_sensitive ? query : query.ToLowerInvariant());
+            var utf16Needle = Encoding.Unicode.GetBytes(case_sensitive ? query : query.ToLowerInvariant());
+
+            // Build case-insensitive lookup tables for the first byte of each needle
+            // so we can compare without allocating a lowered copy of every file
+            byte[] utf8NeedleUpper = null, utf16NeedleUpper = null;
+            if (!case_sensitive)
+            {
+                utf8NeedleUpper = Encoding.UTF8.GetBytes(query.ToUpperInvariant());
+                utf16NeedleUpper = Encoding.Unicode.GetBytes(query.ToUpperInvariant());
+            }
+
+            var results = new ConcurrentBag<(string path, long size)>();
+            var scanned = 0;
+            var errors = 0;
+            var done = 0;
+
+            Parallel.ForEach(fileList,
+                new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+                file =>
+            {
+                if (Volatile.Read(ref done) == 1) return;
+                Interlocked.Increment(ref scanned);
+
+                try
+                {
+                    var data = file.Read();
+                    if (data == null || data.Length == 0) return;
+
+                    var found = case_sensitive
+                        ? ContainsSequence(data, utf8Needle) || ContainsSequence(data, utf16Needle)
+                        : ContainsSequenceCaseInsensitive(data, utf8Needle, utf8NeedleUpper)
+                          || ContainsSequenceCaseInsensitive(data, utf16Needle, utf16NeedleUpper);
+
+                    if (found)
+                    {
+                        results.Add((file.Path, file.Size));
+                        if (results.Count >= limit)
+                            Volatile.Write(ref done, 1);
+                    }
+                }
+                catch
+                {
+                    Interlocked.Increment(ref errors);
+                }
+            });
+
+            var sorted = results.OrderBy(r => r.path)
+                .Take(limit)
+                .Select(r => new { path = r.path, size = r.size })
+                .ToList();
+
+            return Text(JsonConvert.SerializeObject(new
+            {
+                query,
+                case_sensitive,
+                total_files_in_scope = totalFiles,
+                files_scanned = scanned,
+                files_matched = sorted.Count,
+                scan_errors = errors,
+                limit,
+                results = sorted
+            }, Formatting.Indented));
+        });
+    }
+
+    /// <summary>Exact byte sequence search (case-sensitive).</summary>
+    private static bool ContainsSequence(byte[] haystack, byte[] needle)
+    {
+        return ((ReadOnlySpan<byte>)haystack).IndexOf((ReadOnlySpan<byte>)needle) >= 0;
+    }
+
+    /// <summary>
+    /// Case-insensitive byte sequence search. Checks each candidate position
+    /// byte-by-byte against both the lower and upper needle variants —
+    /// avoids allocating a lowered copy of every file.
+    /// </summary>
+    private static bool ContainsSequenceCaseInsensitive(byte[] haystack, byte[] lower, byte[] upper)
+    {
+        if (lower.Length == 0 || haystack.Length < lower.Length) return false;
+
+        var end = haystack.Length - lower.Length;
+        var lo0 = lower[0];
+        var hi0 = upper[0];
+
+        for (var i = 0; i <= end; i++)
+        {
+            var b = haystack[i];
+            if (b != lo0 && b != hi0) continue;
+
+            var match = true;
+            for (var j = 1; j < lower.Length; j++)
+            {
+                var c = haystack[i + j];
+                if (c != lower[j] && c != upper[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) return true;
+        }
+
+        return false;
     }
 
     // -------------------------------------------------------------------------
