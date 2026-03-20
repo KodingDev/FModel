@@ -765,7 +765,77 @@ public class CUE4ParseViewModel : ViewModel
             {
                 var archive = entry.CreateReader();
                 var registry = new FAssetRegistryState(archive);
-                TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(registry, Formatting.Indented), saveProperties, updateUi);
+
+                var totalEntries = registry.PreallocatedAssetDataBuffers.Length
+                    + registry.PreallocatedDependsNodeDataBuffers.Length
+                    + registry.PreallocatedPackageDataBuffers.Length;
+
+                if (totalEntries > 100_000)
+                {
+                    var assetCount = registry.PreallocatedAssetDataBuffers.Length;
+                    var depsCount = registry.PreallocatedDependsNodeDataBuffers.Length;
+                    var pkgCount = registry.PreallocatedPackageDataBuffers.Length;
+
+                    var preview = JsonConvert.SerializeObject(new
+                    {
+                        FirstAssets = registry.PreallocatedAssetDataBuffers.Take(50),
+                        FirstPackages = registry.PreallocatedPackageDataBuffers.Take(50)
+                    }, Formatting.Indented);
+
+                    registry.PreallocatedDependsNodeDataBuffers = [];
+
+                    var fileName = Path.ChangeExtension(entry.Name, ".json");
+                    var savePath = Path.Combine(UserSettings.Default.PropertiesDirectory,
+                        UserSettings.Default.KeepDirectoryStructure ? entry.Directory : "", fileName).Replace('\\', '/');
+                    Directory.CreateDirectory(savePath.SubstringBeforeLast('/'));
+
+                    var serializer = new JsonSerializer();
+                    using (var fs = new FileStream(savePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+                    using (var sw = new StreamWriter(fs, System.Text.Encoding.UTF8, 65536))
+                    using (var jw = new JsonTextWriter(sw) { Formatting = Formatting.Indented })
+                    {
+                        jw.WriteStartObject();
+
+                        jw.WritePropertyName("PreallocatedAssetDataBuffers");
+                        jw.WriteStartArray();
+                        for (var i = 0; i < registry.PreallocatedAssetDataBuffers.Length; i++)
+                        {
+                            serializer.Serialize(jw, registry.PreallocatedAssetDataBuffers[i]);
+                            if (i % 500 == 0) jw.Flush();
+                        }
+                        jw.WriteEndArray();
+                        registry.PreallocatedAssetDataBuffers = [];
+                        GC.Collect();
+
+                        jw.WritePropertyName("PreallocatedDependsNodeDataBuffers");
+                        jw.WriteStartArray();
+                        jw.WriteEndArray();
+
+                        jw.WritePropertyName("PreallocatedPackageDataBuffers");
+                        jw.WriteStartArray();
+                        for (var i = 0; i < registry.PreallocatedPackageDataBuffers.Length; i++)
+                        {
+                            serializer.Serialize(jw, registry.PreallocatedPackageDataBuffers[i]);
+                            if (i % 500 == 0) jw.Flush();
+                        }
+                        jw.WriteEndArray();
+
+                        jw.WriteEndObject();
+                    }
+
+                    var fileSizeMb = new FileInfo(savePath).Length / 1024.0 / 1024.0;
+                    TabControl.SelectedTab.SetDocumentText(
+                        $"AssetRegistry extracted to JSON ({fileSizeMb:F1}MB):\n{savePath}\n\n" +
+                        $"Assets: {assetCount:N0}\nDependencies: {depsCount:N0}\nPackages: {pkgCount:N0}\n\n" + preview,
+                        false, updateUi);
+
+                    FLogger.Append(ELog.Information, () =>
+                        FLogger.Text($"AssetRegistry ({fileSizeMb:F1}MB) saved to '{savePath}'", Constants.WHITE, true));
+                }
+                else
+                {
+                    TabControl.SelectedTab.SetDocumentText(JsonConvert.SerializeObject(registry, Formatting.Indented), saveProperties, updateUi);
+                }
 
                 break;
             }

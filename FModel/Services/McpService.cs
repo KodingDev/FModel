@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,23 +12,18 @@ using Microsoft.Extensions.Logging;
 
 using ModelContextProtocol.AspNetCore;
 
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
 using Serilog;
 
 namespace FModel.Services;
 
-/// <summary>
-/// Static entry point — keeps a single McpServerHandler alive for the lifetime of the process.
-/// Referenced from ApplicationService via <c>McpService.McpServer</c>.
-/// </summary>
 public static class McpService
 {
     public static McpServerHandler McpServer { get; } = new();
 }
 
-/// <summary>
-/// Manages the ASP.NET Core host that serves the MCP HTTP endpoint embedded inside FModel.
-/// Claude Desktop (or any MCP client) can connect to <c>http://localhost:{port}/sse</c>.
-/// </summary>
 public class McpServerHandler
 {
     private WebApplication _app;
@@ -35,7 +31,6 @@ public class McpServerHandler
 
     public bool IsRunning { get; private set; }
 
-    /// <summary>Set by <see cref="FModel.Views.SettingsView"/> after settings are saved.</summary>
     internal CUE4ParseViewModel CUE4Parse { get; private set; }
 
     public void SetProvider(CUE4ParseViewModel vm) => CUE4Parse = vm;
@@ -49,15 +44,9 @@ public class McpServerHandler
             _cts = new CancellationTokenSource();
 
             var builder = WebApplication.CreateBuilder();
-
-            // Silence ASP.NET Core's own console logging — FModel uses Serilog
             builder.Logging.ClearProviders();
-
             builder.WebHost.UseUrls($"http://localhost:{port}");
-
-            // Register ourselves as a singleton so McpTools can inject it
             builder.Services.AddSingleton(this);
-
             builder.Services
                 .AddMcpServer()
                 .WithHttpTransport()
@@ -66,16 +55,57 @@ public class McpServerHandler
             _app = builder.Build();
             _app.MapMcp();
 
-            // Run on a background thread so we don't block the WPF dispatcher
             Task.Run(() => _app.RunAsync(), _cts.Token);
 
             IsRunning = true;
             Log.Information("[MCP] Server started on http://localhost:{Port}/sse", port);
+            EnsureClaudeCodeRegistration(port);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "[MCP] Failed to start server");
             IsRunning = false;
+        }
+    }
+
+    public static void EnsureClaudeCodeRegistration(int port)
+    {
+        var url = $"http://localhost:{port}/sse";
+        var expected = new JObject { ["type"] = "sse", ["url"] = url };
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        RegisterInFile(Path.Combine(home, ".claude.json"), expected);
+        RegisterInFile(Path.Combine(home, ".claude", "settings.json"), expected);
+    }
+
+    private static void RegisterInFile(string path, JObject expected)
+    {
+        try
+        {
+            JObject root;
+            if (File.Exists(path))
+                root = JObject.Parse(File.ReadAllText(path));
+            else
+                return;
+
+            var servers = root["mcpServers"] as JObject;
+            if (servers == null)
+            {
+                servers = new JObject();
+                root["mcpServers"] = servers;
+            }
+
+            var existing = servers["fmodel"] as JObject;
+            if (existing != null && JToken.DeepEquals(existing, expected))
+                return;
+
+            servers["fmodel"] = expected.DeepClone();
+            File.WriteAllText(path, root.ToString(Formatting.Indented));
+            Log.Information("[MCP] Registered fmodel in {Path}", path);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[MCP] Could not register in {Path}", path);
         }
     }
 
