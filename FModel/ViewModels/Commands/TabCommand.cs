@@ -80,6 +80,25 @@ public class TabCommand : ViewModelCommand<TabItem>
             case "Copy_Asset_Path":
                 ClipboardExtensions.SetText(tabViewModel.Entry.Path);
                 break;
+            case "Copy_Material_Diagram":
+                await _threadWorkerView.Begin(async _ =>
+                {
+                    try
+                    {
+                        var mermaid = await MaterialVisualizer.GenerateFromEntry(
+                            _applicationView.CUE4Parse.Provider, tabViewModel.Entry);
+                        System.Windows.Application.Current.Dispatcher.Invoke(
+                            () => ClipboardExtensions.SetText(mermaid));
+                        FLogger.Append(ELog.Information, () =>
+                            FLogger.Text("Material diagram copied to clipboard", Constants.WHITE, true));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        FLogger.Append(ELog.Error, () =>
+                            FLogger.Text($"Failed to generate material diagram: {ex.Message}", Constants.WHITE, true));
+                    }
+                });
+                break;
         }
     }
 }

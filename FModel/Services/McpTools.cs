@@ -22,6 +22,8 @@ using ModelContextProtocol.Server;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using Serilog;
+
 namespace FModel.Services;
 
 [McpServerToolType]
@@ -269,6 +271,7 @@ public class FModelMcpTools(McpServerHandler handler)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "[MCP] ReadAssetJson failed for '{AssetPath}'", asset_path);
             return Error(ex.Message);
         }
     }
@@ -326,6 +329,7 @@ public class FModelMcpTools(McpServerHandler handler)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "[MCP] GetAssetExports failed for '{AssetPath}'", asset_path);
             return Error(ex.Message);
         }
     }
@@ -357,6 +361,7 @@ public class FModelMcpTools(McpServerHandler handler)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "[MCP] GetRawFile failed for '{FilePath}'", file_path);
             return Error(ex.Message);
         }
     }
@@ -407,6 +412,7 @@ public class FModelMcpTools(McpServerHandler handler)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "[MCP] ExtractTexture failed for '{AssetPath}'", asset_path);
             return Error(ex.Message);
         }
     }
@@ -603,6 +609,33 @@ public class FModelMcpTools(McpServerHandler handler)
     }
 
     // -------------------------------------------------------------------------
+    // Material visualization
+    // -------------------------------------------------------------------------
+
+    [McpServerTool]
+    [Description("Generate a Mermaid flowchart diagram visualizing a material's parameter hierarchy, texture references, overrides, blend mode, shading model, and static switches. Works with MaterialInstanceConstant, MaterialInstance, and Material assets.")]
+    public async Task<CallToolResult> VisualizeMaterial(
+        [Description("Full asset path to the material (extension optional). e.g. 'Game/Characters/Materials/MI_Body'")] string asset_path)
+    {
+        if (!IsLoaded) return Error(NotLoadedMsg);
+
+        try
+        {
+            var entry = ResolveEntry(asset_path, ".uasset", ".umap");
+            if (entry == null) return Error($"File not found: {asset_path}");
+
+            var package = await Task.Run(() => handler.CUE4Parse.Provider.LoadPackage(entry));
+            var mermaid = MaterialVisualizer.Generate(package);
+            return Text(mermaid);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MCP] VisualizeMaterial failed for '{AssetPath}'", asset_path);
+            return Error(ex.Message);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Reference scanning
     // -------------------------------------------------------------------------
 
@@ -628,6 +661,7 @@ public class FModelMcpTools(McpServerHandler handler)
             }
             catch (Exception ex)
             {
+                Log.Error(ex, "[MCP] FindReferences failed for '{AssetPath}'", asset_path);
                 return Error(ex.Message);
             }
         });
