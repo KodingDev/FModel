@@ -616,6 +616,9 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -661,6 +664,20 @@
                                FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Margin="0 5 0 0"
                                Foreground="{DynamicResource {x:Static adonisUi:Brushes.Layer1InteractionForegroundBrush}}"
                                Text="Changes take effect when you click OK. Requires a loaded game to serve results." />
+
+                    <Separator Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource CustomSeparator}" Tag="BLENDER LINK" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Blender Plugin" VerticalAlignment="Center" Margin="0 5 0 5" />
+                    <StackPanel Grid.Row="7" Grid.Column="2" Orientation="Horizontal" Margin="0 5 0 5">
+                        <Button Content="Install Plugin" Click="OnInstallBlenderLink" Loaded="OnBlenderLinkButtonLoaded" Padding="12 4" />
+                        <TextBlock Tag="BlenderLinkStatus" Loaded="OnBlenderLinkStatusLoaded" VerticalAlignment="Center" Margin="10 0 0 0"
+                                   Foreground="{DynamicResource {x:Static adonisUi:Brushes.Layer1InteractionForegroundBrush}}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+                               FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Margin="0 0 0 0"
+                               Foreground="{DynamicResource {x:Static adonisUi:Brushes.Layer1InteractionForegroundBrush}}"
+                               Text="Installs the BlenderLink addon to all detected Blender versions. After installing, enable the addon in Blender's Preferences. The plugin listens for mesh/animation exports from FModel." />
                 </Grid>
             </DataTemplate>
         </ResourceDictionary>

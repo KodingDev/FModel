@@ -31,6 +31,7 @@ public partial class SettingsView
             treeItem.IsSelected = i == UserSettings.Default.LastOpenedSettingTab;
             i++;
         }
+
     }
 
     private async void OnClick(object sender, RoutedEventArgs e)
@@ -144,6 +145,77 @@ public partial class SettingsView
 
         path = string.Empty;
         return false;
+    }
+
+    private void OnBlenderLinkButtonLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn)
+            btn.Content = BlenderLinkService.GetButtonLabel();
+    }
+
+    private void OnBlenderLinkStatusLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBlock tb)
+            tb.Text = BlenderLinkService.GetStatusText();
+    }
+
+    private void OnInstallBlenderLink(object sender, RoutedEventArgs e)
+    {
+        // Always ask the user to select blender.exe
+        var openFileDialog = new OpenFileDialog
+        {
+            Title = "Select blender.exe",
+            Filter = "Blender (blender.exe)|blender.exe|All Files (*.*)|*.*",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
+        };
+
+        if (!openFileDialog.ShowDialog().GetValueOrDefault())
+            return;
+
+        var blenderExe = openFileDialog.FileName;
+        var addonsPath = BlenderLinkService.GetAddonsPathFromExe(blenderExe);
+        if (string.IsNullOrEmpty(addonsPath))
+        {
+            MessageBox.Show(
+                "Could not determine the addons directory from the selected Blender path.",
+                "BlenderLink", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var result = BlenderLinkService.InstallAndEnable(addonsPath, blenderExe);
+        int installed = result.installed ? 1 : 0;
+        int enabled = result.enabled ? 1 : 0;
+        int failed = result.installed ? 0 : 1;
+
+        // Refresh the UI elements via the button's parent
+        if (sender is Button btn)
+        {
+            btn.Content = BlenderLinkService.GetButtonLabel();
+            if (btn.Parent is StackPanel sp)
+            {
+                foreach (var child in sp.Children)
+                {
+                    if (child is TextBlock tb && tb.Tag as string == "BlenderLinkStatus")
+                        tb.Text = BlenderLinkService.GetStatusText();
+                }
+            }
+        }
+
+        if (failed == 0 && installed > 0)
+        {
+            var enabledMsg = enabled > 0
+                ? "The addon has been automatically enabled."
+                : "Could not auto-enable — please enable the addon manually in Blender's Preferences > Add-ons.";
+            MessageBox.Show(
+                $"BlenderLink addon installed to {installed} Blender version(s).\n\n{enabledMsg}",
+                "BlenderLink", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else if (failed > 0)
+        {
+            MessageBox.Show(
+                $"Installed to {installed} version(s), failed for {failed}.\nCheck logs for details.",
+                "BlenderLink", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void OnSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)

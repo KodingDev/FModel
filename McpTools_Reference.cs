@@ -10,19 +10,14 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-using CUE4Parse.UE4.Assets;
-using CUE4Parse.UE4.Assets.Exports;
-using CUE4Parse.UE4.Assets.Objects;
 using CUE4Parse.UE4.Assets.Exports.Animation;
 using CUE4Parse.UE4.Assets.Exports.Material;
 using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
 using CUE4Parse.UE4.Assets.Exports.Texture;
 using CUE4Parse.UE4.Objects.Core.Math;
-using CUE4Parse.UE4.Objects.UObject;
 using CUE4Parse.Utils;
 
-using CUE4Parse_Conversion;
 using CUE4Parse_Conversion.Animations;
 using CUE4Parse_Conversion.Animations.PSA;
 using CUE4Parse_Conversion.Meshes;
@@ -41,7 +36,6 @@ using Newtonsoft.Json.Linq;
 
 using Serilog;
 
-using SharpGLTF.Animations;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
@@ -694,789 +688,6 @@ public class FModelMcpTools(McpServerHandler handler)
     }
 
     // -------------------------------------------------------------------------
-    // Material diagnostics
-    // -------------------------------------------------------------------------
-
-    [McpServerTool]
-    [Description("""
-        Diagnose a material asset: walk the full parent chain (MI → MI → M), accumulate
-        all parameters at each level, and extract CachedExpressionData from the base UMaterial.
-        Returns a comprehensive JSON showing the material chain, all textures/scalars/vectors/switches,
-        base material properties, connected output pins, material functions, and normalized texture names.
-        """)]
-    public async Task<CallToolResult> DiagnoseMaterial(
-        [Description("Full path to the material asset (UMaterialInstanceConstant or UMaterial).")] string material_path)
-    {
-        if (!IsLoaded) return Error(NotLoadedMsg);
-
-        try
-        {
-            var entry = ResolveEntry(material_path, ".uasset", ".umap");
-            if (entry == null) return Error($"Material not found: {material_path}");
-
-            return await Task.Run(() =>
-            {
-                var pkg = handler.CUE4Parse.Provider.LoadPackage(entry);
-                var matInterface = pkg.GetExports().OfType<UMaterialInterface>().FirstOrDefault();
-                if (matInterface == null)
-                    return Error("No UMaterialInterface found in this asset.");
-
-                var platform = UserSettings.Default.CurrentDir?.TexturePlatform ?? ETexturePlatform.DesktopMobile;
-
-                // --- Walk parent chain ---
-                var chain = new List<object>();
-                var allTextures = new List<object>();
-                var allScalars = new List<object>();
-                var allVectors = new List<object>();
-                var allSwitches = new List<object>();
-                string baseMaterialPath = "";
-                int baseBlendMode = 0;
-                int shadingModel = 1;
-                float opacityMaskClipValue = 0.333f;
-                bool twoSided = false;
-                var connectedOutputs = new List<string>();
-                var materialFunctions = new List<string>();
-                int propertyConnectedMask = 0;
-
-                void WalkChain(UMaterialInterface mi, int depth)
-                {
-                    if (mi is UMaterialInstanceConstant mic)
-                    {
-                        var levelTextures = new List<object>();
-                        foreach (var tp in mic.TextureParameterValues)
-                        {
-                            if (!tp.ParameterValue.TryLoad(out UTexture texture)) continue;
-
-                            // Normalize name
-                            string normalizedName = tp.Name;
-                            var knownNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                "Diffuse", "D", "Base Color", "BaseColor", "Normals", "N", "Normal",
-                                "SpecularMasks", "S", "SRM", "ORM", "MRO", "Emissive", "M", "Mask"
-                            };
-                            if (!knownNames.Contains(tp.Name))
-                            {
-                                if (Regex.IsMatch(tp.Name, CMaterialParams2.RegexDiffuse, RegexOptions.IgnoreCase))
-                                    normalizedName = "Diffuse";
-                                else if (texture.CompressionSettings == TextureCompressionSettings.TC_Normalmap ||
-                                         Regex.IsMatch(tp.Name, CMaterialParams2.RegexNormals, RegexOptions.IgnoreCase))
-                                    normalizedName = "Normals";
-                                else if (Regex.IsMatch(tp.Name, CMaterialParams2.RegexSpecularMasks, RegexOptions.IgnoreCase))
-                                    normalizedName = "SpecularMasks";
-                                else if (Regex.IsMatch(tp.Name, CMaterialParams2.RegexEmissive, RegexOptions.IgnoreCase))
-                                    normalizedName = "Emissive";
-                            }
-
-                            var texInfo = new
-                            {
-                                Name = tp.Name,
-                                NormalizedName = normalizedName,
-                                Value = texture.GetPathName(),
-                                sRGB = texture.SRGB,
-                                CompressionSettings = texture.CompressionSettings.ToString()
-                            };
-                            levelTextures.Add(texInfo);
-                            if (!allTextures.Any(t => ((dynamic)t).Name == tp.Name))
-                                allTextures.Add(texInfo);
-                        }
-
-                        var levelScalars = new List<object>();
-                        foreach (var sp in mic.ScalarParameterValues)
-                        {
-                            var info = new { sp.Name, sp.ParameterValue };
-                            levelScalars.Add(info);
-                            if (!allScalars.Any(s => ((dynamic)s).Name == sp.Name))
-                                allScalars.Add(info);
-                        }
-
-                        var levelVectors = new List<object>();
-                        foreach (var vp in mic.VectorParameterValues)
-                        {
-                            if (vp.ParameterValue == null) continue;
-                            var c = vp.ParameterValue.Value;
-                            var info = new { vp.Name, Value = new { c.R, c.G, c.B, c.A } };
-                            levelVectors.Add(info);
-                            if (!allVectors.Any(v => ((dynamic)v).Name == vp.Name))
-                                allVectors.Add(info);
-                        }
-
-                        var levelSwitches = new List<object>();
-                        if (mic.StaticParameters != null)
-                        {
-                            foreach (var sw in mic.StaticParameters.StaticSwitchParameters)
-                            {
-                                var info = new { sw.Name, sw.Value };
-                                levelSwitches.Add(info);
-                                if (!allSwitches.Any(s => ((dynamic)s).Name == sw.Name))
-                                    allSwitches.Add(info);
-                            }
-                        }
-
-                        chain.Add(new
-                        {
-                            Type = "UMaterialInstanceConstant",
-                            Path = mic.GetPathName(),
-                            Name = mic.Name,
-                            Depth = depth,
-                            Textures = levelTextures,
-                            Scalars = levelScalars,
-                            Vectors = levelVectors,
-                            Switches = levelSwitches,
-                            OverrideBlendMode = (int)(mic.BasePropertyOverrides?.BlendMode ?? 0)
-                        });
-
-                        if (mic.Parent is UMaterialInterface parent)
-                            WalkChain(parent, depth + 1);
-                    }
-                    else if (mi is UMaterial baseMat)
-                    {
-                        baseMaterialPath = baseMat.GetPathName();
-                        baseBlendMode = (int)baseMat.BlendMode;
-                        shadingModel = (int)baseMat.ShadingModel;
-                        twoSided = baseMat.GetOrDefault("bIsTwoSided", false) || baseMat.TwoSided;
-                        opacityMaskClipValue = baseMat.GetOrDefault("OpacityMaskClipValue", 0.333f);
-
-                        // Extract CachedExpressionData
-                        try
-                        {
-                            var cachedData = baseMat.CachedExpressionData;
-                            propertyConnectedMask = cachedData?.GetOrDefault<int>("PropertyConnectedMask") ?? 0;
-
-                            string[] pinNames = { "BaseColor", "EmissiveColor", "Opacity", "OpacityMask",
-                                "WorldPositionOffset", "SubsurfaceColor", "Normal", "Tangent",
-                                "Metallic", "Specular", "Roughness", "Anisotropy",
-                                "AmbientOcclusion", "Refraction", "PixelDepthOffset",
-                                "ShadingModel", "CustomData0", "CustomData1", "CustomEyeTangent" };
-                            for (int b = 0; b < pinNames.Length; b++)
-                                if ((propertyConnectedMask & (1 << b)) != 0)
-                                    connectedOutputs.Add(pinNames[b]);
-
-                            if (cachedData?.TryGetValue(out FStructFallback[] funcInfos, "FunctionInfos") == true)
-                            {
-                                foreach (var info in funcInfos)
-                                {
-                                    var funcIdx = info?.GetOrDefault<FPackageIndex>("Function");
-                                    if (funcIdx?.ResolvedObject != null)
-                                        materialFunctions.Add(funcIdx.ResolvedObject.Name.Text);
-                                }
-                            }
-                        }
-                        catch { }
-
-                        chain.Add(new
-                        {
-                            Type = "UMaterial",
-                            Path = baseMat.GetPathName(),
-                            Name = baseMat.Name,
-                            Depth = depth,
-                            BlendMode = baseMat.BlendMode.ToString(),
-                            ShadingModel = baseMat.ShadingModel.ToString(),
-                            TwoSided = twoSided,
-                            ExpressionCount = baseMat.Expressions.Length,
-                            PropertyConnectedMask = propertyConnectedMask,
-                            ConnectedOutputs = connectedOutputs,
-                            MaterialFunctions = materialFunctions
-                        });
-                    }
-                }
-
-                WalkChain(matInterface, 0);
-
-                return Text(JsonConvert.SerializeObject(new
-                {
-                    MaterialPath = material_path,
-                    Chain = chain,
-                    AccumulatedTextures = allTextures,
-                    AccumulatedScalars = allScalars,
-                    AccumulatedVectors = allVectors,
-                    AccumulatedSwitches = allSwitches,
-                    BaseMaterial = new
-                    {
-                        Path = baseMaterialPath,
-                        BlendMode = baseBlendMode,
-                        ShadingModel = shadingModel,
-                        TwoSided = twoSided,
-                        OpacityMaskClipValue = opacityMaskClipValue
-                    },
-                    CachedExpressionData = new
-                    {
-                        PropertyConnectedMask = propertyConnectedMask,
-                        ConnectedOutputs = connectedOutputs,
-                        MaterialFunctions = materialFunctions
-                    }
-                }, Formatting.Indented));
-            });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[MCP] DiagnoseMaterial failed for '{MaterialPath}'", material_path);
-            return Error(ex.Message);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // BlenderLink – send meshes/animations to local or remote Blender instances
-    // -------------------------------------------------------------------------
-
-    private static readonly System.Net.Http.HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
-    private const int DefaultBlenderPort = 24280;
-    private const string BlenderEndpoint = "/fmodel";
-
-    [McpServerTool]
-    [Description("""
-        Execute arbitrary Python code inside a running Blender instance via the BlenderLink plugin.
-        The code runs on Blender's main thread with access to bpy, os, json, math, and import_image.
-        Set __result__ in your code to return a value. Use this to build custom shader node graphs,
-        modify materials, inspect scene state, or any other Blender operation.
-        Requires Blender running with the BlenderLink plugin (v3.1+) active on port 24280.
-        """)]
-    public async Task<CallToolResult> ExecuteBlenderScript(
-        [Description("Python code to execute inside Blender. Has access to bpy, os, json, math. Set __result__ to return data.")] string code,
-        [Description("Blender target as host:port (default: 127.0.0.1:24280)")] string target = "")
-    {
-        try
-        {
-            var host = string.IsNullOrWhiteSpace(target) ? $"127.0.0.1:{DefaultBlenderPort}" : target;
-            if (!host.Contains(':')) host += $":{DefaultBlenderPort}";
-            var url = $"http://{host}{BlenderEndpoint}/execute";
-
-            var payload = JsonConvert.SerializeObject(new { code });
-            var content = new System.Net.Http.StringContent(payload, Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(url, content);
-            var body = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-                return Error($"Blender returned {response.StatusCode}: {body}");
-
-            return Text(body);
-        }
-        catch (Exception ex)
-        {
-            return Error($"Failed to execute in Blender: {ex.Message}");
-        }
-    }
-
-    [McpServerTool]
-    [Description("""
-        Export a mesh (with optional animation) directly into one or more running Blender
-        instances via the BlenderLink protocol. Exports .uemodel/.ueanim and texture files
-        to disk, then sends the import command to each Blender target on port 24280.
-        Requires Blender running with the BlenderLink plugin active.
-        Targets default to localhost; specify remote IPs/hostnames to send to friends.
-        """)]
-    public async Task<CallToolResult> ExportToBlender(
-        [Description("Full path to the mesh asset (extension optional).")] string mesh_path,
-        [Description("Full path to an animation sequence asset (optional). Leave empty for mesh only.")] string anim_path = "",
-        [Description("Comma-separated list of Blender targets as host or host:port (default: 127.0.0.1:24280). Example: '127.0.0.1,192.168.1.50:24280,my-friend-pc'")] string targets = "")
-    {
-        if (!IsLoaded) return Error(NotLoadedMsg);
-
-        try
-        {
-            // Parse targets – default to localhost
-            var targetList = new List<string>();
-            if (string.IsNullOrWhiteSpace(targets))
-            {
-                targetList.Add($"127.0.0.1:{DefaultBlenderPort}");
-            }
-            else
-            {
-                foreach (var raw in targets.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                {
-                    targetList.Add(raw.Contains(':') ? raw : $"{raw}:{DefaultBlenderPort}");
-                }
-            }
-
-            // Build base URLs for each target
-            var targetUrls = targetList.Select(t => $"http://{t}{BlenderEndpoint}").ToList();
-
-            // Ping all Blender targets
-            var unreachable = new List<string>();
-            foreach (var url in targetUrls)
-            {
-                try
-                {
-                    var ping = await _httpClient.GetAsync($"{url}/ping");
-                    if (!ping.IsSuccessStatusCode) unreachable.Add(url);
-                }
-                catch
-                {
-                    unreachable.Add(url);
-                }
-            }
-            if (unreachable.Count == targetUrls.Count)
-                return Error($"Cannot connect to any Blender target. Make sure Blender is running with the BlenderLink plugin (port {DefaultBlenderPort}). Unreachable: {string.Join(", ", targetList)}");
-
-            var meshEntry = ResolveEntry(mesh_path, ".uasset", ".umap");
-            if (meshEntry == null) return Error($"Mesh not found: {mesh_path}");
-
-            return await Task.Run(async () =>
-            {
-                var pkg = handler.CUE4Parse.Provider.LoadPackage(meshEntry);
-                var skelMesh = pkg.GetExports().OfType<USkeletalMesh>().FirstOrDefault();
-                var staticMesh = skelMesh == null ? pkg.GetExports().OfType<UStaticMesh>().FirstOrDefault() : null;
-                var meshObj = (UObject)skelMesh ?? staticMesh;
-
-                if (meshObj == null)
-                    return Error("No USkeletalMesh or UStaticMesh found in this asset.");
-
-                var assetsRoot = UserSettings.Default.OutputDirectory;
-                var platform = UserSettings.Default.CurrentDir?.TexturePlatform ?? ETexturePlatform.DesktopMobile;
-                var options = new ExporterOptions
-                {
-                    LodFormat = ELodFormat.AllLods,
-                    MeshFormat = EMeshFormat.UEFormat,
-                    AnimFormat = EAnimFormat.UEFormat,
-                    ExportMorphTargets = true,
-                    ExportMaterials = false
-                };
-
-                // --- Helper: normalize texture parameter names to standard names the Blender plugin expects ---
-                // Uses the same regex patterns as CMaterialParams2 to handle any UE game's naming conventions
-                string NormalizeTextureParamName(string name, UTexture texture)
-                {
-                    // Already a standard name the plugin recognizes
-                    var knownNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        "Diffuse", "D", "Base Color", "BaseColor", "BaseColorMap", "Albedo", "DiffuseMap", "PM_Diffuse",
-                        "SpecularMasks", "S", "SRM", "ORM", "MRO", "MROMap", "BaseMask", "PM_SpecularMasks",
-                        "Normals", "N", "Normal", "NormalMap", "PM_Normals",
-                        "Emissive", "EmissiveMask", "EmissiveTexture", "PM_Emissive",
-                        "M", "Mask", "MaskTexture", "OpacityMask",
-                        "LitDiffuse", "ShadedDiffuse",
-                        "SkinFX_Mask", "Thin Film Texture", "ClothFuzz Texture",
-                    };
-                    if (knownNames.Contains(name)) return name;
-
-                    // Regex-based categorization from CMaterialParams2
-                    if (Regex.IsMatch(name, CMaterialParams2.RegexDiffuse, RegexOptions.IgnoreCase))
-                        return "Diffuse";
-                    if (texture.CompressionSettings == TextureCompressionSettings.TC_Normalmap ||
-                        Regex.IsMatch(name, CMaterialParams2.RegexNormals, RegexOptions.IgnoreCase))
-                        return "Normals";
-                    if (Regex.IsMatch(name, CMaterialParams2.RegexSpecularMasks, RegexOptions.IgnoreCase))
-                        return "SpecularMasks";
-                    if (Regex.IsMatch(name, CMaterialParams2.RegexEmissive, RegexOptions.IgnoreCase))
-                        return "Emissive";
-
-                    // Exact-match fallback for common names across UE games
-                    var fallbacks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        ["Base Texture"] = "Diffuse",
-                        ["Base Color Texture"] = "Diffuse",
-                        ["Base_Tex"] = "Diffuse",
-                        ["Color Map"] = "Diffuse",
-                        ["Colour Map"] = "Diffuse",
-                        ["Texture"] = "Diffuse",
-                        ["Normal Map"] = "Normals",
-                        ["Normal Texture"] = "Normals",
-                        ["BumpMap"] = "Normals",
-                        ["MetallicRoughnessOcclusionSpecularTexture"] = "SpecularMasks",
-                        ["Metallic Texture"] = "SpecularMasks",
-                        ["Roughness Texture"] = "SpecularMasks",
-                        ["ARM"] = "SpecularMasks",
-                        ["RMA"] = "SpecularMasks",
-                        ["MRA"] = "SpecularMasks",
-                        ["PackedTexture"] = "SpecularMasks",
-                        ["Subsurface Texture"] = "Emissive",
-                        ["Subsurface Color Texture"] = "Emissive",
-                        ["Emissive Texture"] = "Emissive",
-                        ["Emission Texture"] = "Emissive",
-                        ["Glow Texture"] = "Emissive",
-                        ["Opacity Texture"] = "MaskTexture",
-                        ["Alpha Texture"] = "MaskTexture",
-                        ["Opacity Mask Texture"] = "MaskTexture",
-                    };
-                    if (fallbacks.TryGetValue(name, out var mapped)) return mapped;
-
-                    return name; // pass through if no match
-                }
-
-                // --- Helper: get game path for an asset ---
-                string GetGamePath(UObject obj) => obj.GetPathName();
-
-                // --- Helper: save an asset to disk ---
-                string SaveAsset(UObject obj, string ext, byte[] data)
-                {
-                    var ownerPath = obj.Owner?.Name ?? obj.Name;
-                    if (ownerPath.StartsWith("/")) ownerPath = ownerPath[1..];
-                    ownerPath = ownerPath.Contains('.') ? ownerPath[..ownerPath.LastIndexOf('.')] : ownerPath;
-                    var filePath = Path.Combine(assetsRoot, ownerPath + "." + ext);
-                    Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-                    File.WriteAllBytes(filePath, data);
-                    return filePath;
-                }
-
-                // --- Export mesh as .uemodel ---
-                var meshExporter = skelMesh != null
-                    ? new MeshExporter(skelMesh, options)
-                    : new MeshExporter(staticMesh!, options);
-
-                if (meshExporter.MeshLods.Count == 0)
-                    return Error("Failed to convert mesh.");
-
-                SaveAsset(meshObj, "uemodel", meshExporter.MeshLods[0].FileData);
-                var meshName = meshObj.Name;
-                var meshGamePath = GetGamePath(meshObj);
-
-                // --- Export materials with textures ---
-                var materialExports = new List<object>();
-                var meshToConvert = skelMesh != null ? (object)skelMesh : staticMesh!;
-                CUE4Parse_Conversion.Meshes.PSK.CBaseMeshLod lod0 = null;
-
-                if (skelMesh != null && skelMesh.TryConvert(out var convertedSkel) && convertedSkel.LODs.Count > 0)
-                    lod0 = convertedSkel.LODs[0];
-                else if (staticMesh != null && staticMesh.TryConvert(out var convertedStatic) && convertedStatic.LODs.Count > 0)
-                    lod0 = convertedStatic.LODs[0];
-
-                if (lod0 != null)
-                {
-                    for (var i = 0; i < lod0.Sections.Value.Length; i++)
-                    {
-                        var sect = lod0.Sections.Value[i];
-                        if (sect.Material?.Load<UMaterialInterface>() is not { } mat) continue;
-
-                        // Accumulate material parameters
-                        var texParams = new List<object>();
-                        var scalarParams = new List<object>();
-                        var vectorParams = new List<object>();
-                        var switchParams = new List<object>();
-                        var componentMaskParams = new List<object>();
-                        string physMatName = "";
-                        string baseMaterialPath = "";
-                        int overrideBlendMode = 0;
-                        int baseBlendMode = 0;
-                        int shadingModel = 1; // DefaultLit
-                        float opacityMaskClipValue = 0.333f;
-                        bool twoSided = false;
-                        var connectedOutputs = new List<string>();
-                        var materialFunctions = new List<string>();
-
-                        void AccumulateMaterialParams(UMaterialInterface matInterface)
-                        {
-                            if (matInterface is UMaterialInstanceConstant mic)
-                            {
-                                foreach (var tp in mic.TextureParameterValues)
-                                {
-                                    if (!tp.ParameterValue.TryLoad(out UTexture texture)) continue;
-                                    var normalizedName = NormalizeTextureParamName(tp.Name, texture);
-                                    if (texParams.Any(t => ((dynamic)t).Name == normalizedName)) continue;
-
-                                    // Export texture to disk
-                                    var decoded = (texture as UTexture2D)?.Decode(platform);
-                                    if (decoded != null)
-                                    {
-                                        var pngData = decoded.Encode(ETextureFormat.Png, false, out _);
-                                        SaveAsset(texture, "png", pngData);
-                                    }
-
-                                    texParams.Add(new
-                                    {
-                                        Name = normalizedName,
-                                        OriginalName = tp.Name,
-                                        Value = GetGamePath(texture),
-                                        sRGB = texture.SRGB,
-                                        CompressionSettings = (int)texture.CompressionSettings
-                                    });
-                                }
-
-                                foreach (var sp in mic.ScalarParameterValues)
-                                {
-                                    if (scalarParams.Any(s => ((dynamic)s).Name == sp.Name)) continue;
-                                    scalarParams.Add(new { Name = sp.Name, Value = sp.ParameterValue });
-                                }
-
-                                foreach (var vp in mic.VectorParameterValues)
-                                {
-                                    if (vectorParams.Any(v => ((dynamic)v).Name == vp.Name)) continue;
-                                    if (vp.ParameterValue == null) continue;
-                                    var c = vp.ParameterValue.Value;
-                                    vectorParams.Add(new { Name = vp.Name, Value = new { c.R, c.G, c.B, c.A } });
-                                }
-
-                                if (mic.StaticParameters != null)
-                                {
-                                    foreach (var sw in mic.StaticParameters.StaticSwitchParameters)
-                                    {
-                                        if (switchParams.Any(s => ((dynamic)s).Name == sw.Name)) continue;
-                                        switchParams.Add(new { Name = sw.Name, Value = sw.Value });
-                                    }
-
-                                    foreach (var cm in mic.StaticParameters.StaticComponentMaskParameters)
-                                    {
-                                        if (componentMaskParams.Any(c => ((dynamic)c).Name == cm.Name)) continue;
-                                        componentMaskParams.Add(new { Name = cm.Name, Value = new { R = cm.R ? 1f : 0f, G = cm.G ? 1f : 0f, B = cm.B ? 1f : 0f, A = cm.A ? 1f : 0f } });
-                                    }
-                                }
-
-                                overrideBlendMode = (int)(mic.BasePropertyOverrides?.BlendMode ?? 0);
-                                if (mic.BasePropertyOverrides != null)
-                                {
-                                    opacityMaskClipValue = mic.BasePropertyOverrides.OpacityMaskClipValue > 0
-                                        ? mic.BasePropertyOverrides.OpacityMaskClipValue
-                                        : opacityMaskClipValue;
-                                }
-                                twoSided = mic.GetOrDefault("bIsTwoSided", twoSided);
-
-                                if (mic.Parent is UMaterialInterface parent)
-                                    AccumulateMaterialParams(parent);
-                            }
-                            else if (matInterface is UMaterial baseMat)
-                            {
-                                baseMaterialPath = baseMat.GetPathName();
-                                physMatName = baseMat.GetOrDefault<FPackageIndex>("PhysMaterial")?.Name ?? "";
-                                baseBlendMode = (int)baseMat.BlendMode;
-                                shadingModel = (int)baseMat.ShadingModel;
-                                twoSided = baseMat.GetOrDefault("bIsTwoSided", twoSided) || baseMat.TwoSided;
-
-                                // Extract CachedExpressionData (available in cooked builds)
-                                try
-                                {
-                                    var cachedData = baseMat.CachedExpressionData;
-                                    int connectedMask = cachedData?.GetOrDefault<int>("PropertyConnectedMask") ?? 0;
-
-                                    string[] pinNames = { "BaseColor", "EmissiveColor", "Opacity", "OpacityMask",
-                                        "WorldPositionOffset", "SubsurfaceColor", "Normal", "Tangent",
-                                        "Metallic", "Specular", "Roughness", "Anisotropy",
-                                        "AmbientOcclusion", "Refraction", "PixelDepthOffset",
-                                        "ShadingModel", "CustomData0", "CustomData1", "CustomEyeTangent" };
-                                    for (int b = 0; b < pinNames.Length; b++)
-                                        if ((connectedMask & (1 << b)) != 0)
-                                            connectedOutputs.Add(pinNames[b]);
-
-                                    if (cachedData?.TryGetValue(out FStructFallback[] funcInfos, "FunctionInfos") == true)
-                                    {
-                                        foreach (var info in funcInfos)
-                                        {
-                                            var funcIdx = info?.GetOrDefault<FPackageIndex>("Function");
-                                            if (funcIdx?.ResolvedObject != null)
-                                                materialFunctions.Add(funcIdx.ResolvedObject.Name.Text);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Log.Warning(ex, "[MCP] Failed to extract CachedExpressionData for {Material}", baseMat.Name);
-                                }
-
-                                // Fallback: extract textures from base material if none found yet
-                                if (texParams.Count == 0)
-                                {
-                                    var baseParams = new CMaterialParams2();
-                                    baseMat.GetParams(baseParams, EMaterialFormat.AllLayers);
-                                    foreach (var (name, texRef) in baseParams.Textures)
-                                    {
-                                        if (texRef is not UTexture2D tex2d) continue;
-                                        var decoded = tex2d.Decode(platform);
-                                        if (decoded != null)
-                                        {
-                                            var pngData = decoded.Encode(ETextureFormat.Png, false, out _);
-                                            SaveAsset(tex2d, "png", pngData);
-                                        }
-                                        texParams.Add(new
-                                        {
-                                            Name = name,
-                                            OriginalName = name,
-                                            Value = GetGamePath(tex2d),
-                                            sRGB = tex2d.SRGB,
-                                            CompressionSettings = (int)tex2d.CompressionSettings
-                                        });
-                                    }
-                                }
-                            }
-                        }
-
-                        AccumulateMaterialParams(mat);
-
-                        materialExports.Add(new
-                        {
-                            Name = mat.Name,
-                            Path = mat.GetPathName(),
-                            BaseMaterialPath = baseMaterialPath,
-                            Slot = i,
-                            Hash = mat.GetPathName().GetHashCode(),
-                            PhysMaterialName = physMatName,
-                            OverrideBlendMode = overrideBlendMode,
-                            BaseBlendMode = baseBlendMode,
-                            ShadingModel = shadingModel,
-                            TranslucencyLightingMode = 0,
-                            OpacityMaskClipValue = opacityMaskClipValue,
-                            TwoSided = twoSided,
-                            Textures = texParams,
-                            Scalars = scalarParams,
-                            Vectors = vectorParams,
-                            Switches = switchParams,
-                            ComponentMasks = componentMaskParams,
-                            ConnectedOutputs = connectedOutputs,
-                            MaterialFunctions = materialFunctions
-                        });
-                    }
-                }
-
-                // --- Build mesh JSON ---
-                var meshData = new
-                {
-                    Name = meshName,
-                    Path = meshGamePath,
-                    Type = -1,
-                    NumLods = meshExporter.MeshLods.Count,
-                    IsEmpty = false,
-                    Materials = materialExports,
-                    OverrideMaterials = Array.Empty<object>(),
-                    TextureData = Array.Empty<object>(),
-                    Children = Array.Empty<object>(),
-                    Instances = Array.Empty<object>(),
-                    OverrideVertexColors = Array.Empty<object>(),
-                    Lights = new { PointLights = Array.Empty<object>() },
-                    Location = new { X = 0f, Y = 0f, Z = 0f },
-                    Rotation = new { Pitch = 0f, Yaw = 0f, Roll = 0f },
-                    Scale = new { X = 1f, Y = 1f, Z = 1f },
-                    Meta = (object)null
-                };
-
-                // --- Export animation if provided ---
-                object animData = null;
-                string animName = "";
-                if (!string.IsNullOrWhiteSpace(anim_path))
-                {
-                    var animEntry = ResolveEntry(anim_path, ".uasset", ".umap");
-                    if (animEntry == null) return Error($"Animation not found: {anim_path}");
-
-                    var animPkg = handler.CUE4Parse.Provider.LoadPackage(animEntry);
-                    var animSeq = animPkg.GetExports().OfType<UAnimSequence>().FirstOrDefault();
-                    if (animSeq == null) return Error("No UAnimSequence found in animation asset.");
-
-                    // Export .ueanim
-                    var animExporter = new AnimExporter(animSeq, options);
-                    if (animExporter.AnimSequences.Count > 0)
-                        SaveAsset(animSeq, "ueanim", animExporter.AnimSequences[0].FileData);
-                    animName = animSeq.Name;
-
-                    animData = new
-                    {
-                        Sections = new[]
-                        {
-                            new
-                            {
-                                Path = GetGamePath(animSeq),
-                                Name = animName,
-                                Time = 0f,
-                                Length = animSeq.SequenceLength,
-                                LinkValue = 0f,
-                                Loop = false
-                            }
-                        },
-                        Skeleton = meshData,
-                        Sounds = Array.Empty<object>(),
-                        Props = Array.Empty<object>(),
-                        LegacyToMetahumanMappings = Array.Empty<object>(),
-                        MetahumanToLegacyMappings = Array.Empty<object>()
-                    };
-                }
-
-                // --- Build export packet ---
-                var export = animData != null
-                    ? (object)new
-                    {
-                        Name = meshName,
-                        Type = 1, // OUTFIT
-                        PrimitiveType = 0, // MESH
-                        Meshes = new[] { meshData },
-                        OverrideMeshes = Array.Empty<object>(),
-                        OverrideMaterials = Array.Empty<object>(),
-                        OverrideParameters = Array.Empty<object>(),
-                        Animation = animData,
-                        Lights = new { PointLights = Array.Empty<object>() }
-                    }
-                    : (object)new
-                    {
-                        Name = meshName,
-                        Type = 30, // MESH (generic)
-                        PrimitiveType = 0, // MESH
-                        Meshes = new[] { meshData },
-                        OverrideMeshes = Array.Empty<object>(),
-                        OverrideMaterials = Array.Empty<object>(),
-                        OverrideParameters = Array.Empty<object>(),
-                        Lights = new { PointLights = Array.Empty<object>() }
-                    };
-
-                var exportPacket = new
-                {
-                    MetaData = new
-                    {
-                        AssetsRoot = assetsRoot.Replace('\\', '/'),
-                        Settings = new
-                        {
-                            ExportMaterials = true,
-                            ScaleDown = true,
-                            ImportIntoCollection = true,
-                            ImportAt3DCursor = false,
-                            RigType = 0,
-                            ReorientBones = false,
-                            ImportSockets = true,
-                            ImportVirtualBones = false,
-                            UseDynamicBoneShape = true,
-                            SimplifyFaceBones = true,
-                            BoneLength = 4.0f,
-                            TargetLOD = 0,
-                            PolygonType = 0,
-                            ImportCollision = false,
-                            AmbientOcclusion = 0f,
-                            Cavity = 0f,
-                            Subsurface = 0f,
-                            ToonShadingBrightness = 0.5f,
-                            MaterialImportMethod = 0,
-                            TextureImportMethod = 0,
-                            ImageFormat = 0,
-                            SoundFormat = 0,
-                            LoopAnimation = false,
-                            UpdateTimelineLength = true,
-                            ImportSounds = false
-                        }
-                    },
-                    Exports = new[] { export }
-                };
-
-                var json = JsonConvert.SerializeObject(exportPacket);
-
-                // Send to all reachable targets in parallel
-                var reachableUrls = targetUrls.Except(unreachable).ToList();
-                var sendTasks = reachableUrls.Select(async url =>
-                {
-                    try
-                    {
-                        var content = new System.Net.Http.StringContent(json, Encoding.UTF8, "application/json");
-                        var response = await _httpClient.PostAsync($"{url}/data", content);
-                        return new { target = url, success = response.IsSuccessStatusCode, status = response.IsSuccessStatusCode ? "imported" : $"error: {response.StatusCode}" };
-                    }
-                    catch (Exception ex)
-                    {
-                        return new { target = url, success = false, status = $"error: {ex.Message}" };
-                    }
-                }).ToList();
-
-                var results = await Task.WhenAll(sendTasks);
-
-                return Text(JsonConvert.SerializeObject(new
-                {
-                    success = results.Any(r => r.success),
-                    mesh_name = meshName,
-                    anim_name = animName,
-                    materials = materialExports.Count,
-                    blender_status = results.Length == 1 ? results[0].status : "see targets",
-                    targets = results,
-                    assets_root = assetsRoot
-                }, Formatting.Indented));
-            });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[MCP] ExportToBlender failed");
-            return Error(ex.Message);
-        }
-    }
-
-    // -------------------------------------------------------------------------
     // Mesh export (textured glTF)
     // -------------------------------------------------------------------------
 
@@ -1644,7 +855,6 @@ public class FModelMcpTools(McpServerHandler handler)
                 for (var i = 0; i < lod.Sections.Value.Length; i++)
                 {
                     var sect = lod.Sections.Value[i];
-        
                     var mat = ResolveMaterial(i, sect, platform);
                     var prim = gltfMesh.UsePrimitive(mat);
 
@@ -1671,66 +881,87 @@ public class FModelMcpTools(McpServerHandler handler)
                 var armatureNode = new NodeBuilder(meshName + ".ao");
                 var armature = Gltf.CreateGltfSkeleton(bones, armatureNode);
 
-                // Build bone name → NodeBuilder lookup using each node's own name
-                // (armature array order ≠ bones list order due to depth-first traversal)
+                // Build bone name → NodeBuilder lookup
+                // armature array is in the same order as CreateGltfSkeleton produces:
+                // it walks bones in order, so armature[i] corresponds to bones[i]
                 var boneNodes = new Dictionary<string, NodeBuilder>(StringComparer.OrdinalIgnoreCase);
-                foreach (var node in armature)
-                    boneNodes[node.Name] = node;
+                for (var i = 0; i < armature.Length && i < bones.Count; i++)
+                    boneNodes[bones[i].Name.Text] = armature[i];
 
-                // Map skeleton bone names for the animation (indexed same as seq.Tracks)
+                // Map skeleton bone names for the animation
                 var skeletonBoneNames = new string[skeleton.BoneCount];
                 for (var i = 0; i < skeleton.BoneCount; i++)
                     skeletonBoneNames[i] = skeleton.ReferenceSkeleton.FinalRefBoneInfo[i].Name.Text;
 
-                // --- Bake animation keyframes frame-by-frame ---
+                // --- Write animation keyframes ---
                 var trackName = seq.Name;
                 var numFrames = seq.NumFrames;
                 var fps = seq.FramesPerSecond > 0 ? seq.FramesPerSecond : 30f;
 
-                // Get rest pose from the animation skeleton (same space as animation tracks)
-                var restPose = skeleton.ReferenceSkeleton.FinalRefBonePose;
-
-                // Pre-create curve builders for bones that have animation tracks.
-                // Animate ALL channels (rot/pos/scale) for tracked bones — initialize
-                // defaults from the skeleton rest pose so unkeyed channels stay correct.
-                var boneCurves = new (CurveBuilder<Quaternion> rot, CurveBuilder<Vector3> pos, CurveBuilder<Vector3> scale)?[seq.Tracks.Count];
                 for (var boneIdx = 0; boneIdx < seq.Tracks.Count && boneIdx < skeletonBoneNames.Length; boneIdx++)
                 {
-                    // Only create curves for bones that have a matching mesh node
+                    var track = seq.Tracks[boneIdx];
+                    if (!track.HasKeys()) continue;
+
                     var boneName = skeletonBoneNames[boneIdx];
                     if (!boneNodes.TryGetValue(boneName, out var node)) continue;
 
-                    // Check if this bone has an actual animation track
-                    if (seq.OriginalSequence.FindTrackForBoneIndex(boneIdx) < 0) continue;
-
-                    boneCurves[boneIdx] = (
-                        node.UseRotation(trackName),
-                        node.UseTranslation(trackName),
-                        node.UseScale(trackName)
-                    );
-                }
-
-                // Bake every frame. For each bone, start with the rest pose as default
-                // (matching how ActorX export works), then let GetBoneTransform override
-                // channels that have actual keyframe data.
-                for (var frame = 0; frame < numFrames; frame++)
-                {
-                    var time = frame / fps;
-                    for (var boneIdx = 0; boneIdx < seq.Tracks.Count && boneIdx < skeletonBoneNames.Length; boneIdx++)
+                    // Rotation keyframes
+                    if (track.KeyQuat.Length > 0)
                     {
-                        if (boneCurves[boneIdx] is not var (rotCurve, posCurve, scaleCurve)) continue;
+                        var rotCurve = node.UseRotation(trackName);
+                        if (track.KeyQuat.Length == 1)
+                        {
+                            var q = track.KeyQuat[0];
+                            rotCurve.SetPoint(0f, Gltf.SwapYZ(q).ToQuaternion());
+                        }
+                        else
+                        {
+                            for (var k = 0; k < track.KeyQuat.Length; k++)
+                            {
+                                var time = GetKeyTime(track.KeyQuatTime, track.KeyTime, k, track.KeyQuat.Length, numFrames, fps);
+                                var q = track.KeyQuat[k];
+                                rotCurve.SetPoint(time, Gltf.SwapYZ(q).ToQuaternion());
+                            }
+                        }
+                    }
 
-                        // Initialize from rest pose — GetBoneTransform only overwrites
-                        // channels that have keys, leaving others at these defaults
-                        var rot = boneIdx < restPose.Length ? restPose[boneIdx].Rotation : FQuat.Identity;
-                        var pos = boneIdx < restPose.Length ? restPose[boneIdx].Translation : FVector.ZeroVector;
-                        var scale = boneIdx < restPose.Length ? restPose[boneIdx].Scale3D : new FVector(1, 1, 1);
+                    // Translation keyframes
+                    if (track.KeyPos.Length > 0)
+                    {
+                        var posCurve = node.UseTranslation(trackName);
+                        if (track.KeyPos.Length == 1)
+                        {
+                            var p = track.KeyPos[0];
+                            posCurve.SetPoint(0f, (Vector3)SwapYZ(p * 0.01f));
+                        }
+                        else
+                        {
+                            for (var k = 0; k < track.KeyPos.Length; k++)
+                            {
+                                var time = GetKeyTime(track.KeyPosTime, track.KeyTime, k, track.KeyPos.Length, numFrames, fps);
+                                var p = track.KeyPos[k];
+                                posCurve.SetPoint(time, (Vector3)SwapYZ(p * 0.01f));
+                            }
+                        }
+                    }
 
-                        seq.Tracks[boneIdx].GetBoneTransform(frame, numFrames, ref rot, ref pos, ref scale);
-
-                        rotCurve.SetPoint(time, Gltf.SwapYZ(rot).ToQuaternion());
-                        posCurve.SetPoint(time, (Vector3)SwapYZ(pos * 0.01f));
-                        scaleCurve.SetPoint(time, (Vector3)scale);
+                    // Scale keyframes
+                    if (track.KeyScale.Length > 0)
+                    {
+                        var scaleCurve = node.UseScale(trackName);
+                        if (track.KeyScale.Length == 1)
+                        {
+                            scaleCurve.SetPoint(0f, (Vector3)track.KeyScale[0]);
+                        }
+                        else
+                        {
+                            for (var k = 0; k < track.KeyScale.Length; k++)
+                            {
+                                var time = GetKeyTime(track.KeyScaleTime, track.KeyTime, k, track.KeyScale.Length, numFrames, fps);
+                                scaleCurve.SetPoint(time, (Vector3)track.KeyScale[k]);
+                            }
+                        }
                     }
                 }
 
@@ -1793,7 +1024,6 @@ public class FModelMcpTools(McpServerHandler handler)
         for (var i = 0; i < lod.Sections.Value.Length; i++)
         {
             var sect = lod.Sections.Value[i];
-
             var mat = ResolveMaterial(i, sect, platform);
             var prim = mesh.UsePrimitive(mat);
 
@@ -1826,7 +1056,6 @@ public class FModelMcpTools(McpServerHandler handler)
         for (var i = 0; i < lod.Sections.Value.Length; i++)
         {
             var sect = lod.Sections.Value[i];
-
             var mat = ResolveMaterial(i, sect, platform);
             var prim = mesh.UsePrimitive(mat);
 
@@ -1987,22 +1216,6 @@ public class FModelMcpTools(McpServerHandler handler)
             return decoded.Encode(ETextureFormat.Png, false, out _);
         }
         catch { return null; }
-    }
-
-    /// <summary>Detect physics proxy sections (collision spheres/capsules with very low face counts).</summary>
-    private static bool IsPhysicsProxy(CMeshSection sect)
-    {
-        // Physics collision proxies are typically small sphere/capsule meshes with < 500 faces.
-        // Real mesh sections for character body parts have thousands of faces.
-        if (sect.NumFaces < 500) return true;
-
-        // Also filter by known physics material name patterns
-        var name = sect.MaterialName;
-        if (name != null && (name.Contains("Physics", StringComparison.OrdinalIgnoreCase) ||
-                             name.Contains("Collision", StringComparison.OrdinalIgnoreCase)))
-            return true;
-
-        return false;
     }
 
     /// <summary>Vertex position/normal/tangent preparation with UE4→glTF coordinate swap.</summary>

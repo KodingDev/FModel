@@ -96,6 +96,7 @@
     <None Remove="Resources\NoText.png" />
     <None Remove="Resources\Flat.png" />
     <None Remove="Resources\Cataba.png" />
+    <None Remove="Resources\blenderlink_addon.py" />
     <None Remove="Resources\BurbankBigCondensed-Bold.ttf" />
     <None Remove="Resources\add_directory.png" />
     <None Remove="Resources\delete.png" />
@@ -147,6 +148,7 @@
     <EmbeddedResource Include="Resources\bone.frag" />
     <EmbeddedResource Include="Resources\bone.vert" />
     <EmbeddedResource Include="Resources\collision.vert" />
+    <EmbeddedResource Include="Resources\blenderlink_addon.py" />
   </ItemGroup>
 
   <ItemGroup>
